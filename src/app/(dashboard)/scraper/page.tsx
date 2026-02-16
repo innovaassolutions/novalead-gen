@@ -29,7 +29,7 @@ const scraperTypes = [
 ];
 
 export default function ScraperPage() {
-  const activeRuns = useQuery(api.scraperRuns.getActive);
+  const allRuns = useQuery(api.scraperRuns.list, {});
 
   return (
     <div className="space-y-6">
@@ -57,11 +57,11 @@ export default function ScraperPage() {
       <div>
         <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
           <Search className="h-5 w-5" />
-          Active & Recent Runs
+          All Runs
         </h2>
-        {activeRuns && activeRuns.length > 0 ? (
+        {allRuns && allRuns.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
-            {activeRuns.map((run) => (
+            {allRuns.map((run) => (
               <ScraperProgress key={run._id} runId={run._id} />
             ))}
           </div>
@@ -69,7 +69,7 @@ export default function ScraperPage() {
           <Card>
             <CardContent className="flex h-48 items-center justify-center">
               <p className="text-sm text-muted-foreground">
-                No active scraper runs. Select a scraper type above to get started.
+                No scraper runs. Select a scraper type above to get started.
               </p>
             </CardContent>
           </Card>

@@ -192,7 +192,15 @@ http.route({
       return new Response("Unauthorized", { status: 401 });
     }
     const body = await request.json();
-    await ctx.runMutation(api.scraperRuns.updateProgress, body);
+    // Map worker field names to mutation args
+    await ctx.runMutation(api.scraperRuns.updateProgress, {
+      id: body.scraperRunId,
+      companiesFound: body.companiesFound,
+      leadsFound: body.leadsFound,
+      completedJobs: body.completedJobs,
+      failedJobs: body.failedJobs,
+      status: body.status,
+    });
     return Response.json({ success: true });
   }),
 });

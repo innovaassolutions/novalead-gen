@@ -16,8 +16,11 @@ export default function IntegrationsPage() {
   const [novaCrmKey, setNovaCrmKey] = useState("");
 
   const setSetting = useMutation(api.settings.set);
-  const instantlySetting = useQuery(api.settings.get, { key: "instantly_api_key" });
-  const novaCrmUrlSetting = useQuery(api.settings.get, { key: "novacrm_url" });
+  const integrationStatus = useQuery(api.settings.getIntegrationStatus);
+
+  const instantlyConnected = integrationStatus?.instantly_api_key?.configured ?? false;
+  const novaCrmConnected = integrationStatus?.novacrm_url?.configured && integrationStatus?.novacrm_api_key?.configured;
+  const novaCrmSource = integrationStatus?.novacrm_url?.source;
 
   const handleSaveInstantly = async () => {
     await setSetting({ key: "instantly_api_key", value: instantlyKey });
@@ -48,7 +51,7 @@ export default function IntegrationsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2 text-sm">
-              Status: {instantlySetting?.value ? (
+              Status: {instantlyConnected ? (
                 <Badge variant="default" className="gap-1"><CheckCircle className="h-3 w-3" /> Connected</Badge>
               ) : (
                 <Badge variant="secondary" className="gap-1"><XCircle className="h-3 w-3" /> Not configured</Badge>
@@ -71,8 +74,11 @@ export default function IntegrationsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2 text-sm">
-              Status: {novaCrmUrlSetting?.value ? (
-                <Badge variant="default" className="gap-1"><CheckCircle className="h-3 w-3" /> Connected</Badge>
+              Status: {novaCrmConnected ? (
+                <>
+                  <Badge variant="default" className="gap-1"><CheckCircle className="h-3 w-3" /> Connected</Badge>
+                  {novaCrmSource === "env" && <span className="text-xs text-muted-foreground">(via env vars)</span>}
+                </>
               ) : (
                 <Badge variant="secondary" className="gap-1"><XCircle className="h-3 w-3" /> Not configured</Badge>
               )}

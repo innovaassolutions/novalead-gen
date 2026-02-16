@@ -50,3 +50,43 @@ export const getAll = query({
     return await ctx.db.query("settings").collect();
   },
 });
+
+// Maps settings keys to their corresponding Convex environment variable names
+const ENV_FALLBACKS: Record<string, string> = {
+  novacrm_url: "NOVACRM_URL",
+  novacrm_api_key: "NOVACRM_LEAD_CAPTURE_API_KEY",
+  instantly_api_key: "INSTANTLY_API_KEY",
+};
+
+// Check integration status: settings table first, then Convex env vars as fallback
+export const getIntegrationStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const keys = ["novacrm_url", "novacrm_api_key", "instantly_api_key"];
+    const result: Record<string, { configured: boolean; source: "settings" | "env" }> = {};
+
+    for (const key of keys) {
+      // Check settings table first
+      const setting = await ctx.db
+        .query("settings")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .first();
+
+      if (setting?.value) {
+        result[key] = { configured: true, source: "settings" };
+        continue;
+      }
+
+      // Fall back to Convex environment variable
+      const envName = ENV_FALLBACKS[key];
+      if (envName && process.env[envName]) {
+        result[key] = { configured: true, source: "env" };
+        continue;
+      }
+
+      result[key] = { configured: false, source: "settings" };
+    }
+
+    return result;
+  },
+});

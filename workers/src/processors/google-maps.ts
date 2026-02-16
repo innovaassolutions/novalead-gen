@@ -99,6 +99,14 @@ export async function processGoogleMaps(client: ConvexClient, job: any): Promise
     `Starting Google Maps scrape: "${query}" across ${locations.length} location(s)`
   );
 
+  // Mark run as running
+  if (scraperRunId) {
+    await client.updateScraperProgress({
+      scraperRunId,
+      status: "running",
+    });
+  }
+
   let totalCompanies = 0;
   let totalEnrichJobs = 0;
   const errors: string[] = [];
@@ -212,7 +220,7 @@ export async function processGoogleMaps(client: ConvexClient, job: any): Promise
     totalSteps: locations.length,
     message: `Completed. Found ${totalCompanies} companies.`,
     companiesFound: totalCompanies,
-    status: errors.length > 0 ? "completed_with_errors" : "completed",
+    status: "completed",
   });
 
   const result = {

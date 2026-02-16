@@ -1,11 +1,13 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Users, AlertCircle, CheckCircle2, Loader2, Pause } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building2, Users, AlertCircle, CheckCircle2, Loader2, Pause, StopCircle } from "lucide-react";
 import { Id } from "../../../convex/_generated/dataModel";
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -18,12 +20,26 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 export function ScraperProgress({ runId }: { runId: string }) {
   const run = useQuery(api.scraperRuns.getById, { id: runId as Id<"scraperRuns"> });
+  const cancelRun = useMutation(api.scraperRuns.cancelRun);
+  const [cancelling, setCancelling] = useState(false);
 
   if (!run) {
     return null;
   }
 
   const progress = run.totalJobs > 0 ? (run.completedJobs / run.totalJobs) * 100 : 0;
+  const isActive = run.status === "pending" || run.status === "running";
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      await cancelRun({ id: runId as Id<"scraperRuns"> });
+    } catch (error) {
+      console.error("Failed to cancel scraper run:", error);
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <Card>
@@ -33,9 +49,26 @@ export function ScraperProgress({ runId }: { runId: string }) {
             {STATUS_ICONS[run.status]}
             {run.name}
           </CardTitle>
-          <Badge variant={run.status === "completed" ? "default" : run.status === "failed" ? "destructive" : "secondary"}>
-            {run.status}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {isActive && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleCancel}
+                disabled={cancelling}
+              >
+                {cancelling ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <StopCircle className="mr-1 h-3 w-3" />
+                )}
+                Cancel
+              </Button>
+            )}
+            <Badge variant={run.status === "completed" ? "default" : run.status === "failed" ? "destructive" : "secondary"}>
+              {run.status}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

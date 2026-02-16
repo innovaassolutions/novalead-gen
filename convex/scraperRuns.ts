@@ -70,12 +70,21 @@ export const updateProgress = mutation({
     failedJobs: v.optional(v.number()),
     leadsFound: v.optional(v.number()),
     companiesFound: v.optional(v.number()),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("running"),
+        v.literal("paused"),
+        v.literal("completed"),
+        v.literal("failed")
+      )
+    ),
   },
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.id);
     if (!run) throw new Error("Scraper run not found");
 
-    const updates: Record<string, number> = {};
+    const updates: Record<string, unknown> = {};
 
     if (args.completedJobs !== undefined) {
       updates.completedJobs = run.completedJobs + args.completedJobs;
@@ -88,6 +97,15 @@ export const updateProgress = mutation({
     }
     if (args.companiesFound !== undefined) {
       updates.companiesFound = run.companiesFound + args.companiesFound;
+    }
+    if (args.status) {
+      updates.status = args.status;
+      if (args.status === "running" && !run.startedAt) {
+        updates.startedAt = Date.now();
+      }
+      if (args.status === "completed" || args.status === "failed") {
+        updates.completedAt = Date.now();
+      }
     }
 
     await ctx.db.patch(args.id, updates);
@@ -119,6 +137,37 @@ export const updateStatus = mutation({
     }
 
     await ctx.db.patch(args.id, updates);
+  },
+});
+
+export const cancelRun = mutation({
+  args: { id: v.id("scraperRuns") },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.id);
+    if (!run) throw new Error("Scraper run not found");
+
+    // Update run status
+    await ctx.db.patch(args.id, {
+      status: "failed",
+      completedAt: Date.now(),
+    });
+
+    // Cancel all pending/claimed jobs for this run
+    const jobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_scraper_run", (q) => q.eq("scraperRunId", args.id))
+      .collect();
+
+    for (const job of jobs) {
+      if (job.status === "pending" || job.status === "claimed") {
+        await ctx.db.patch(job._id, {
+          status: "cancelled",
+          completedAt: Date.now(),
+        });
+      }
+    }
+
+    return { cancelledJobs: jobs.filter((j) => j.status === "pending" || j.status === "claimed").length };
   },
 });
 
