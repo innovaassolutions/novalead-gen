@@ -1,12 +1,17 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   ArrowLeft,
   Building2,
@@ -23,6 +28,7 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
@@ -266,210 +272,224 @@ export default function CompanyDetailPage({
           </CardContent>
         </Card>
 
-        {/* Enrichment History */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Brain className="h-4 w-4" /> Enrichment History
-              {enrichments && (
-                <Badge variant="secondary" className="ml-1">
-                  {enrichments.length}
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {enrichments === undefined ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : enrichments.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No enrichment has been run for this company yet. Select this company from the list and click &quot;Enrich Selected&quot; to start.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {enrichments.map((enrichment) => (
-                  <div
-                    key={enrichment._id}
-                    className="rounded-md border p-4 space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className="text-xs"
-                        >
-                          {enrichment.promptType === "research_company"
-                            ? "Company Research"
-                            : enrichment.promptType === "find_contacts"
-                              ? "Contact Discovery"
-                              : enrichment.promptType}
-                        </Badge>
-                        {enrichment.status === "completed" ? (
-                          <Badge className="bg-green-600 hover:bg-green-600 text-white text-xs gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Completed
-                          </Badge>
-                        ) : enrichment.status === "failed" ? (
-                          <Badge variant="destructive" className="text-xs gap-1">
-                            <AlertCircle className="h-3 w-3" /> Failed
-                          </Badge>
-                        ) : enrichment.status === "processing" ? (
-                          <Badge variant="outline" className="text-xs gap-1">
-                            <Loader2 className="h-3 w-3 animate-spin" /> Processing
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs gap-1">
-                            <Clock className="h-3 w-3" /> Pending
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        {enrichment.costUsd > 0 && (
-                          <span className="flex items-center gap-1">
-                            <DollarSign className="h-3 w-3" />
-                            ${enrichment.costUsd.toFixed(4)}
-                          </span>
-                        )}
-                        <span>
-                          {new Date(enrichment.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Results summary */}
-                    <div className="text-sm">
-                      {enrichment.promptType === "find_contacts" ? (
-                        enrichment.contactsFound > 0 ? (
-                          <p className="text-green-700 dark:text-green-400">
-                            Found {enrichment.contactsFound} contact{enrichment.contactsFound > 1 ? "s" : ""}
-                          </p>
-                        ) : (
-                          <p className="text-muted-foreground">
-                            No contacts found. Claude was unable to identify decision-maker contacts for this company.
-                          </p>
-                        )
-                      ) : enrichment.promptType === "research_company" ? (
-                        enrichment.status === "completed" && enrichment.confidenceScore > 0 ? (
-                          <div className="space-y-1">
-                            <p>
-                              Confidence: <span className={`font-medium ${
-                                enrichment.confidenceScore >= 70
-                                  ? "text-green-600"
-                                  : enrichment.confidenceScore >= 40
-                                    ? "text-yellow-600"
-                                    : "text-red-600"
-                              }`}>{enrichment.confidenceScore}%</span>
-                            </p>
-                            {enrichment.reasoning && (
-                              <p className="text-muted-foreground">{enrichment.reasoning}</p>
+        {/* Enrichment History (Collapsible) */}
+        <Collapsible defaultOpen={false} className="md:col-span-2">
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-4 w-4" /> Enrichment History
+                  {enrichments && (
+                    <Badge variant="secondary" className="ml-1">
+                      {enrichments.length}
+                    </Badge>
+                  )}
+                  <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                </CardTitle>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
+                {enrichments === undefined ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : enrichments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No enrichment has been run for this company yet. Select this company from the list and click &quot;Enrich Selected&quot; to start.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {enrichments.map((enrichment) => (
+                      <div
+                        key={enrichment._id}
+                        className="rounded-md border p-4 space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {enrichment.promptType === "research_company"
+                                ? "Company Research"
+                                : enrichment.promptType === "find_contacts"
+                                  ? "Contact Discovery"
+                                  : enrichment.promptType}
+                            </Badge>
+                            {enrichment.status === "completed" ? (
+                              <Badge className="bg-green-600 hover:bg-green-600 text-white text-xs gap-1">
+                                <CheckCircle2 className="h-3 w-3" /> Completed
+                              </Badge>
+                            ) : enrichment.status === "failed" ? (
+                              <Badge variant="destructive" className="text-xs gap-1">
+                                <AlertCircle className="h-3 w-3" /> Failed
+                              </Badge>
+                            ) : enrichment.status === "processing" ? (
+                              <Badge variant="outline" className="text-xs gap-1">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Processing
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs gap-1">
+                                <Clock className="h-3 w-3" /> Pending
+                              </Badge>
                             )}
                           </div>
-                        ) : (
-                          <p className="text-muted-foreground">
-                            {enrichment.error
-                              ? `Error: ${enrichment.error}`
-                              : "Research completed but no useful data was extracted."}
-                          </p>
-                        )
-                      ) : null}
-                    </div>
-
-                    {/* Token usage */}
-                    {(enrichment.inputTokens > 0 || enrichment.outputTokens > 0) && (
-                      <p className="text-xs text-muted-foreground">
-                        Tokens: {enrichment.inputTokens.toLocaleString()} in / {enrichment.outputTokens.toLocaleString()} out
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Associated Leads */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-4 w-4" /> Associated Leads
-              {leads && (
-                <Badge variant="secondary" className="ml-1">
-                  {leads.length}
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {leads === undefined ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-10 w-full" />
-                ))}
-              </div>
-            ) : leads.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No leads associated with this company yet.
-              </p>
-            ) : (
-              <div className="divide-y">
-                {leads.map((lead) => {
-                  const name =
-                    `${lead.firstName || ""} ${lead.lastName || ""}`.trim() ||
-                    "Unknown";
-                  const statusColor =
-                    STATUS_COLORS[lead.status] ||
-                    "bg-gray-100 text-gray-800";
-                  return (
-                    <div
-                      key={lead._id}
-                      className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <Link
-                            href={`/leads/${lead._id}`}
-                            className="text-sm font-medium hover:underline"
-                          >
-                            {name}
-                          </Link>
-                          <p className="text-xs text-muted-foreground">
-                            {lead.email}
-                          </p>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            {enrichment.costUsd > 0 && (
+                              <span className="flex items-center gap-1">
+                                <DollarSign className="h-3 w-3" />
+                                ${enrichment.costUsd.toFixed(4)}
+                              </span>
+                            )}
+                            <span>
+                              {new Date(enrichment.createdAt).toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {lead.title && (
-                          <span className="text-xs text-muted-foreground hidden sm:inline">
-                            {lead.title}
-                          </span>
+
+                        {/* Results summary */}
+                        <div className="text-sm">
+                          {enrichment.promptType === "find_contacts" ? (
+                            enrichment.contactsFound > 0 ? (
+                              <p className="text-green-700 dark:text-green-400">
+                                Found {enrichment.contactsFound} contact{enrichment.contactsFound > 1 ? "s" : ""}
+                              </p>
+                            ) : (
+                              <p className="text-muted-foreground">
+                                No contacts found. Claude was unable to identify decision-maker contacts for this company.
+                              </p>
+                            )
+                          ) : enrichment.promptType === "research_company" ? (
+                            enrichment.status === "completed" && enrichment.confidenceScore > 0 ? (
+                              <div className="space-y-1">
+                                <p>
+                                  Confidence: <span className={`font-medium ${
+                                    enrichment.confidenceScore >= 70
+                                      ? "text-green-600"
+                                      : enrichment.confidenceScore >= 40
+                                        ? "text-yellow-600"
+                                        : "text-red-600"
+                                  }`}>{enrichment.confidenceScore}%</span>
+                                </p>
+                                {enrichment.reasoning && (
+                                  <p className="text-muted-foreground">{enrichment.reasoning}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-muted-foreground">
+                                {enrichment.error
+                                  ? `Error: ${enrichment.error}`
+                                  : "Research completed but no useful data was extracted."}
+                              </p>
+                            )
+                          ) : null}
+                        </div>
+
+                        {/* Token usage */}
+                        {(enrichment.inputTokens > 0 || enrichment.outputTokens > 0) && (
+                          <p className="text-xs text-muted-foreground">
+                            Tokens: {enrichment.inputTokens.toLocaleString()} in / {enrichment.outputTokens.toLocaleString()} out
+                          </p>
                         )}
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusColor}`}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
+        {/* Associated Leads (Collapsible) */}
+        <Collapsible defaultOpen={true} className="md:col-span-2">
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-4 w-4" /> Associated Leads
+                  {leads && (
+                    <Badge variant="secondary" className="ml-1">
+                      {leads.length}
+                    </Badge>
+                  )}
+                  <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                </CardTitle>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
+                {leads === undefined ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : leads.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No leads associated with this company yet.
+                  </p>
+                ) : (
+                  <div className="divide-y">
+                    {leads.map((lead) => {
+                      const name =
+                        `${lead.firstName || ""} ${lead.lastName || ""}`.trim() ||
+                        "Unknown";
+                      const statusColor =
+                        STATUS_COLORS[lead.status] ||
+                        "bg-gray-100 text-gray-800";
+                      return (
+                        <div
+                          key={lead._id}
+                          className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
                         >
-                          {lead.status.replace(/_/g, " ")}
-                        </span>
-                        {lead.validationScore != null && (
-                          <span
-                            className={`text-xs font-medium ${
-                              lead.validationScore >= 70
-                                ? "text-green-600"
-                                : lead.validationScore >= 40
-                                  ? "text-yellow-600"
-                                  : "text-red-600"
-                            }`}
-                          >
-                            {lead.validationScore}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <Link
+                                href={`/leads/${lead._id}`}
+                                className="text-sm font-medium hover:underline"
+                              >
+                                {name}
+                              </Link>
+                              <p className="text-xs text-muted-foreground">
+                                {lead.email}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {lead.title && (
+                              <span className="text-xs text-muted-foreground hidden sm:inline">
+                                {lead.title}
+                              </span>
+                            )}
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusColor}`}
+                            >
+                              {lead.status.replace(/_/g, " ")}
+                            </span>
+                            {lead.validationScore != null && (
+                              <span
+                                className={`text-xs font-medium ${
+                                  lead.validationScore >= 70
+                                    ? "text-green-600"
+                                    : lead.validationScore >= 40
+                                      ? "text-yellow-600"
+                                      : "text-red-600"
+                                }`}
+                              >
+                                {lead.validationScore}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       </div>
     </div>
   );
