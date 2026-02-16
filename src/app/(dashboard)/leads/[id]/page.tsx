@@ -241,7 +241,7 @@ export default function LeadDetailPage({
             <CardTitle>Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {(lead.status === "enriched" || lead.status === "validated") && lead.status !== "pushed_to_crm" && (
+            {(lead.status === "enriched" || lead.status === "validated") && (
               <Button
                 className="w-full"
                 onClick={async () => {
