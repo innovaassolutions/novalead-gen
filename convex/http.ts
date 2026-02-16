@@ -82,7 +82,28 @@ http.route({
     const body = await request.json();
     const ids = [];
     for (const company of body.companies) {
-      const id = await ctx.runMutation(api.companies.create, company);
+      // Map worker field names to mutation args
+      const mapped = {
+        name: company.name,
+        domain: company.domain || undefined,
+        website: company.website || undefined,
+        phone: company.phone || undefined,
+        address: company.address || undefined,
+        city: company.city || undefined,
+        state: company.state || undefined,
+        zipCode: company.zipCode || undefined,
+        country: company.country || undefined,
+        category: company.category || undefined,
+        industry: company.industry || undefined,
+        googlePlaceId: company.googlePlaceId || undefined,
+        googleRating: company.rating ?? company.googleRating ?? undefined,
+        googleReviewCount: company.reviewCount ?? company.googleReviewCount ?? undefined,
+        latitude: company.latitude ?? undefined,
+        longitude: company.longitude ?? undefined,
+        source: company.source,
+        metadata: company.metadata || {},
+      };
+      const id = await ctx.runMutation(api.companies.create, mapped);
       ids.push(id);
     }
     return Response.json({ ids });
