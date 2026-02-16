@@ -198,6 +198,7 @@ http.route({
     await ctx.runMutation(api.leads.updateStatus, {
       id: body.leadId,
       status: body.status,
+      validationScore: body.metadata?.emailValidation?.score,
     });
     return Response.json({ success: true });
   }),

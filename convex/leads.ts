@@ -140,7 +140,7 @@ export const batchCreate = mutation({
       created++;
       ids.push(id);
 
-      // Auto-queue email validation
+      // Auto-queue email validation for all new leads
       await ctx.db.insert("jobs", {
         type: "validate_email",
         status: "pending",
@@ -151,20 +151,23 @@ export const batchCreate = mutation({
         createdAt: now,
       });
 
-      // Auto-queue lead enrichment (uses company name from metadata if available)
-      await ctx.db.insert("jobs", {
-        type: "enrich_lead",
-        status: "pending",
-        priority: 4,
-        payload: {
-          leadId: id,
-          email: lead.email,
-          companyName: lead.metadata?.companyName,
-        },
-        attempts: 0,
-        maxAttempts: 3,
-        createdAt: now,
-      });
+      // Only auto-queue enrichment for non-enriched leads (CSV uploads, manual, etc.)
+      // Leads from ai_enrichment are already enriched — don't trigger a loop
+      if (lead.source !== "ai_enrichment") {
+        await ctx.db.insert("jobs", {
+          type: "enrich_lead",
+          status: "pending",
+          priority: 4,
+          payload: {
+            leadId: id,
+            email: lead.email,
+            companyName: lead.metadata?.companyName,
+          },
+          attempts: 0,
+          maxAttempts: 3,
+          createdAt: now,
+        });
+      }
     }
 
     return { created, skipped, ids };
@@ -268,12 +271,17 @@ export const updateStatus = mutation({
       v.literal("pushed_to_crm"),
       v.literal("pushed_to_instantly")
     ),
+    validationScore: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, {
+    const updates: Record<string, unknown> = {
       status: args.status,
       updatedAt: Date.now(),
-    });
+    };
+    if (args.validationScore !== undefined) {
+      updates.validationScore = args.validationScore;
+    }
+    await ctx.db.patch(args.id, updates);
   },
 });
 
