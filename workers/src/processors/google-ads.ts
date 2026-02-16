@@ -3,58 +3,66 @@ import { logger } from "../utils/logger";
 import { withRetry } from "../utils/retry";
 import { RateLimiter } from "../utils/rate-limiter";
 
-// Rate limit for Google Ads Transparency Center scraping
+// Rate limit for SerpAPI
 const rateLimiter = new RateLimiter(30, 60_000);
 
 const SERPAPI_BASE = "https://serpapi.com/search.json";
 
 interface AdResult {
   advertiserName: string;
-  adText: string;
-  landingPage?: string;
   domain?: string;
-  format: string;
-  lastSeen?: string;
-  region?: string;
+  landingPage?: string;
+  adText: string;
 }
 
-async function searchGoogleAdsTransparency(
-  advertiserQuery: string,
+/**
+ * Search Google for a keyword and extract businesses running paid ads.
+ * SerpAPI returns paid ads in the `ads` section of Google search results.
+ * These are high-intent businesses actively spending on advertising.
+ */
+async function searchGoogleForAds(
+  query: string,
   apiKey: string,
-  region?: string
+  location?: string,
 ): Promise<AdResult[]> {
   const params = new URLSearchParams({
-    engine: "google_ads_transparency_center",
-    advertiser_id: advertiserQuery,
+    engine: "google",
+    q: query,
     api_key: apiKey,
+    num: "20",
   });
 
-  if (region) {
-    params.set("region", region);
+  if (location) {
+    params.set("location", location);
   }
 
   const response = await fetch(`${SERPAPI_BASE}?${params.toString()}`);
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`SerpAPI Google Ads error ${response.status}: ${text}`);
+    throw new Error(`SerpAPI error ${response.status}: ${text}`);
   }
 
   const data = await response.json();
   const results: AdResult[] = [];
 
-  if (data.ads) {
-    for (const ad of data.ads) {
-      results.push({
-        advertiserName: ad.advertiser_name || advertiserQuery,
-        adText: ad.text || ad.description || "",
-        landingPage: ad.link || ad.landing_page || undefined,
-        domain: ad.domain || undefined,
-        format: ad.format || "text",
-        lastSeen: ad.last_shown || undefined,
-        region: ad.region || region || undefined,
-      });
-    }
+  // Extract from paid ads (top and bottom)
+  const adSections = [
+    ...(data.ads || []),
+    ...(data.shopping_results || []),
+  ];
+
+  for (const ad of adSections) {
+    const domain = ad.displayed_link
+      ? ad.displayed_link.replace(/https?:\/\//, "").split("/")[0].replace(/^www\./, "")
+      : ad.link ? extractDomainFromUrl(ad.link) : undefined;
+
+    results.push({
+      advertiserName: ad.title || "Unknown",
+      domain,
+      landingPage: ad.link || undefined,
+      adText: ad.description || ad.snippet || "",
+    });
   }
 
   return results;
@@ -69,8 +77,20 @@ function extractDomainFromUrl(url: string): string | undefined {
   }
 }
 
+/**
+ * Build a SerpAPI-compatible location string from country + region.
+ */
+function buildLocation(country?: string, region?: string): string | undefined {
+  if (!country && !region) return undefined;
+  const countryName = country === "ca" ? "Canada" : "United States";
+  if (region) {
+    return `${region}, ${countryName}`;
+  }
+  return countryName;
+}
+
 export async function processGoogleAds(client: ConvexClient, job: any): Promise<any> {
-  const { queries, region, scraperRunId } = job.payload;
+  const { queries, country, region, scraperRunId } = job.payload;
 
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) {
@@ -81,9 +101,19 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
     throw new Error("queries array is required in job payload");
   }
 
+  const location = buildLocation(country, region);
+
   logger.info(
-    `Starting Google Ads transparency scrape: ${queries.length} queries, region: ${region || "all"}`
+    `Starting Google Ads scrape: ${queries.length} queries, location: ${location || "all"}`
   );
+
+  // Mark run as running
+  if (scraperRunId) {
+    await client.updateScraperProgress({
+      scraperRunId,
+      status: "running",
+    });
+  }
 
   let totalAds = 0;
   let totalCompanies = 0;
@@ -94,20 +124,17 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
     const query = queries[i];
 
     try {
-      // Report progress
       await client.updateScraperProgress({
         scraperRunId,
-        currentStep: i + 1,
-        totalSteps: queries.length,
-        message: `Searching ads for "${query}"`,
+        completedJobs: i,
         companiesFound: totalCompanies,
       });
 
       await rateLimiter.wait();
 
       const ads = await withRetry(
-        () => searchGoogleAdsTransparency(query, apiKey, region),
-        { maxRetries: 2, delayMs: 3000, backoff: 2 }
+        () => searchGoogleForAds(query, apiKey, location),
+        { maxRetries: 2, delayMs: 3000, backoff: 2 },
       );
 
       logger.info(`Found ${ads.length} ads for "${query}"`);
@@ -117,26 +144,19 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
       const companiesToCreate: any[] = [];
 
       for (const ad of ads) {
-        const domain = ad.domain || (ad.landingPage ? extractDomainFromUrl(ad.landingPage) : undefined);
-
-        // Deduplicate by domain within this job
-        if (domain && !uniqueDomains.has(domain)) {
-          uniqueDomains.add(domain);
+        if (ad.domain && !uniqueDomains.has(ad.domain)) {
+          uniqueDomains.add(ad.domain);
 
           companiesToCreate.push({
             name: ad.advertiserName,
-            website: ad.landingPage || (domain ? `https://${domain}` : undefined),
-            domain,
+            website: ad.landingPage || `https://${ad.domain}`,
+            domain: ad.domain,
             source: "ad_library" as const,
-            scraperRunId,
             metadata: {
-              adFormat: ad.format,
-              adText: ad.adText.substring(0, 500), // Truncate long ad text
-              lastSeen: ad.lastSeen,
-              region: ad.region,
+              adText: ad.adText.substring(0, 500),
+              searchQuery: query,
+              location,
             },
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
           });
         }
       }
@@ -146,42 +166,24 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
         const createdIds: string[] = batchResult?.ids || [];
         totalCompanies += createdIds.length;
 
-        // Create enrichment jobs for new companies
+        // Create one combined enrichment job per company
         for (let j = 0; j < companiesToCreate.length; j++) {
           const companyId = createdIds[j];
           if (!companyId) continue;
 
           const company = companiesToCreate[j];
-          if (company.domain) {
-            try {
-              await client.createJob({
-                type: "enrich_lead",
-                payload: {
-                  companyName: company.name,
-                  domain: company.domain,
-                  companyId,
-                },
-                priority: 4,
-                createdAt: Date.now(),
-              });
-            } catch (error) {
-              logger.warn(`Failed to create enrich job for ${company.name}`);
-            }
-
-            try {
-              await client.createJob({
-                type: "enrich_company",
-                payload: {
-                  companyName: company.name,
-                  domain: company.domain,
-                  companyId,
-                },
-                priority: 3,
-                createdAt: Date.now(),
-              });
-            } catch (error) {
-              logger.warn(`Failed to create company enrich job for ${company.name}`);
-            }
+          try {
+            await client.createJob({
+              type: "enrich_company",
+              payload: {
+                companyName: company.name,
+                domain: company.domain,
+                companyId,
+              },
+              priority: 5,
+            });
+          } catch (error) {
+            logger.warn(`Failed to create enrich job for ${company.name}`);
           }
         }
       }
@@ -195,11 +197,9 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
   // Final progress update
   await client.updateScraperProgress({
     scraperRunId,
-    currentStep: queries.length,
-    totalSteps: queries.length,
-    message: `Completed. Found ${totalAds} ads from ${totalCompanies} companies.`,
+    completedJobs: queries.length,
     companiesFound: totalCompanies,
-    status: errors.length > 0 ? "completed_with_errors" : "completed",
+    status: "completed",
   });
 
   const result = {
@@ -207,7 +207,7 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
     totalAds,
     uniqueCompanies: totalCompanies,
     uniqueDomains: uniqueDomains.size,
-    region: region || "all",
+    location: location || "all",
     errors: errors.length > 0 ? errors : undefined,
   };
 

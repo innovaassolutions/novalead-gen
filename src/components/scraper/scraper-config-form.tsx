@@ -71,14 +71,23 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
         totalJobs: 1,
       });
 
+      const jobType = scraperType === "google_maps" ? "scrape_google_maps" :
+            scraperType === "google_ads" ? "scrape_google_ads" : "scrape_linkedin_ads";
+
+      // Google Ads and LinkedIn Ads expect 'queries' array, Google Maps uses 'query' string
+      const payload = scraperType === "google_maps"
+        ? { ...config, scraperRunId: runId }
+        : {
+            queries: config.query.split(",").map((q: string) => q.trim()).filter(Boolean),
+            country: config.country,
+            region: config.region,
+            scraperRunId: runId,
+          };
+
       await createJob({
-        type: scraperType === "google_maps" ? "scrape_google_maps" :
-              scraperType === "google_ads" ? "scrape_google_ads" : "scrape_linkedin_ads",
+        type: jobType,
         priority: 7,
-        payload: {
-          ...config,
-          scraperRunId: runId,
-        },
+        payload,
         scraperRunId: runId,
       });
 
@@ -92,8 +101,8 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
 
   const labels = {
     google_maps: { title: "Google Maps Scraper", queryLabel: "Business Type", queryPlaceholder: "e.g., dentist, plumber, law firm" },
-    google_ads: { title: "Google Ads Scraper", queryLabel: "Search Keywords", queryPlaceholder: "e.g., CRM software, accounting tools" },
-    linkedin_ads: { title: "LinkedIn Ads Scraper", queryLabel: "Industry/Keywords", queryPlaceholder: "e.g., B2B SaaS, recruiting" },
+    google_ads: { title: "Google Ads Scraper", queryLabel: "Search Keywords (comma-separated)", queryPlaceholder: "e.g., dentist near me, dental implants, teeth whitening" },
+    linkedin_ads: { title: "LinkedIn Ads Scraper", queryLabel: "Industry/Keywords (comma-separated)", queryPlaceholder: "e.g., B2B SaaS, recruiting software" },
   };
 
   const label = labels[scraperType];
@@ -112,38 +121,36 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
           <Label>{label.queryLabel}</Label>
           <Input placeholder={label.queryPlaceholder} value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
+        <div className="space-y-2">
+          <Label>Country</Label>
+          <Select value={country} onValueChange={(v) => { setCountry(v); setRegion("all"); }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {COUNTRIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>{regionLabel}</Label>
+          <Select value={region} onValueChange={setRegion}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All {regionLabel}s</SelectItem>
+              {regions.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {country === "ca" ? `${r} — ${CA_PROVINCE_NAMES[r]}` : r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {scraperType === "google_maps" && (
-          <>
-            <div className="space-y-2">
-              <Label>Country</Label>
-              <Select value={country} onValueChange={(v) => { setCountry(v); setRegion("all"); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {COUNTRIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>{regionLabel}</Label>
-              <Select value={region} onValueChange={setRegion}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All {regionLabel}s</SelectItem>
-                  {regions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {country === "ca" ? `${r} — ${CA_PROVINCE_NAMES[r]}` : r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Max Results Per Location</Label>
-              <Input type="number" value={maxPerLocation} onChange={(e) => setMaxPerLocation(e.target.value)} min="1" max="60" />
-            </div>
-          </>
+          <div className="space-y-2">
+            <Label>Max Results Per Location</Label>
+            <Input type="number" value={maxPerLocation} onChange={(e) => setMaxPerLocation(e.target.value)} min="1" max="60" />
+          </div>
         )}
         <Button onClick={handleStart} disabled={starting || !query.trim() || !name.trim()} className="w-full">
           {starting ? (
