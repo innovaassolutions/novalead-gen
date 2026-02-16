@@ -12,6 +12,27 @@ interface LinkedInAdResult {
   adContent: string;
 }
 
+// Full state/province names for SerpAPI location parameter
+const US_STATE_NAMES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+  MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+  OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+};
+
+const CA_PROVINCE_NAMES: Record<string, string> = {
+  AB: "Alberta", BC: "British Columbia", MB: "Manitoba", NB: "New Brunswick",
+  NL: "Newfoundland and Labrador", NS: "Nova Scotia", NT: "Northwest Territories",
+  NU: "Nunavut", ON: "Ontario", PE: "Prince Edward Island", QC: "Quebec",
+  SK: "Saskatchewan", YT: "Yukon",
+};
+
 /**
  * Search for LinkedIn advertisers by querying Google for LinkedIn Ad Library results.
  * SerpAPI doesn't have a dedicated LinkedIn Ads engine, so we search Google
@@ -21,6 +42,7 @@ async function searchLinkedInAds(
   query: string,
   apiKey: string,
   location?: string,
+  glCountry?: string,
 ): Promise<LinkedInAdResult[]> {
   const params = new URLSearchParams({
     engine: "google",
@@ -32,6 +54,12 @@ async function searchLinkedInAds(
   if (location) {
     params.set("location", location);
   }
+  if (glCountry) {
+    params.set("gl", glCountry);
+    params.set("hl", "en");
+  }
+
+  logger.info(`SerpAPI LinkedIn request: q="${query}", location="${location || "none"}", gl="${glCountry || "none"}"`);
 
   const response = await fetch(`https://serpapi.com/search.json?${params.toString()}`);
 
@@ -42,6 +70,8 @@ async function searchLinkedInAds(
 
   const data = await response.json();
   const results: LinkedInAdResult[] = [];
+
+  logger.info(`SerpAPI LinkedIn response: organic_results=${(data.organic_results || []).length}`);
 
   if (data.organic_results) {
     for (const result of data.organic_results) {
@@ -59,10 +89,18 @@ async function searchLinkedInAds(
   return results;
 }
 
+/**
+ * Build a SerpAPI-compatible location string from country + region code.
+ * SerpAPI expects full names like "Alberta,Canada" or "California,United States".
+ */
 function buildLocation(country?: string, region?: string): string | undefined {
   if (!country && !region) return undefined;
   const countryName = country === "ca" ? "Canada" : "United States";
-  if (region) return `${region}, ${countryName}`;
+  if (region) {
+    const regionNames = country === "ca" ? CA_PROVINCE_NAMES : US_STATE_NAMES;
+    const fullRegionName = regionNames[region] || region;
+    return `${fullRegionName},${countryName}`;
+  }
   return countryName;
 }
 
@@ -79,9 +117,10 @@ export async function processLinkedInAds(client: ConvexClient, job: any): Promis
   }
 
   const location = buildLocation(country, region);
+  const glCountry = country === "ca" ? "ca" : country === "us" ? "us" : undefined;
 
   logger.info(
-    `Starting LinkedIn Ads scrape: ${queries.length} queries, location: ${location || "all"}`
+    `Starting LinkedIn Ads scrape: ${queries.length} queries, location: ${location || "all"}, gl: ${glCountry || "none"}`
   );
 
   if (scraperRunId) {
@@ -109,7 +148,7 @@ export async function processLinkedInAds(client: ConvexClient, job: any): Promis
       await rateLimiter.wait();
 
       const ads = await withRetry(
-        () => searchLinkedInAds(query, apiKey, location),
+        () => searchLinkedInAds(query, apiKey, location, glCountry),
         { maxRetries: 2, delayMs: 5000, backoff: 2 },
       );
 
