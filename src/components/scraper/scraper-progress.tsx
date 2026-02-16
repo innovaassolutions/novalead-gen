@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, Users, AlertCircle, CheckCircle2, Loader2, Pause, StopCircle } from "lucide-react";
+import { Building2, Users, AlertCircle, CheckCircle2, Loader2, Pause, StopCircle, Trash2 } from "lucide-react";
 import { Id } from "../../../convex/_generated/dataModel";
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -21,7 +21,9 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 export function ScraperProgress({ runId }: { runId: string }) {
   const run = useQuery(api.scraperRuns.getById, { id: runId as Id<"scraperRuns"> });
   const cancelRun = useMutation(api.scraperRuns.cancelRun);
+  const deleteRun = useMutation(api.scraperRuns.deleteRun);
   const [cancelling, setCancelling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!run) {
     return null;
@@ -29,6 +31,7 @@ export function ScraperProgress({ runId }: { runId: string }) {
 
   const progress = run.totalJobs > 0 ? (run.completedJobs / run.totalJobs) * 100 : 0;
   const isActive = run.status === "pending" || run.status === "running";
+  const isFinished = run.status === "completed" || run.status === "failed";
 
   const handleCancel = async () => {
     setCancelling(true);
@@ -38,6 +41,16 @@ export function ScraperProgress({ runId }: { runId: string }) {
       console.error("Failed to cancel scraper run:", error);
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteRun({ id: runId as Id<"scraperRuns"> });
+    } catch (error) {
+      console.error("Failed to delete scraper run:", error);
+      setDeleting(false);
     }
   };
 
@@ -65,7 +78,25 @@ export function ScraperProgress({ runId }: { runId: string }) {
                 Cancel
               </Button>
             )}
-            <Badge variant={run.status === "completed" ? "default" : run.status === "failed" ? "destructive" : "secondary"}>
+            {isFinished && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-1 h-3 w-3" />
+                )}
+                Delete
+              </Button>
+            )}
+            <Badge
+              variant={run.status === "failed" ? "destructive" : "secondary"}
+              className={run.status === "completed" ? "bg-green-600 hover:bg-green-600 text-white" : ""}
+            >
               {run.status}
             </Badge>
           </div>

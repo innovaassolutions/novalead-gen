@@ -140,6 +140,26 @@ export const updateStatus = mutation({
   },
 });
 
+export const deleteRun = mutation({
+  args: { id: v.id("scraperRuns") },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.id);
+    if (!run) throw new Error("Scraper run not found");
+
+    // Delete all jobs associated with this run
+    const jobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_scraper_run", (q) => q.eq("scraperRunId", args.id))
+      .collect();
+
+    for (const job of jobs) {
+      await ctx.db.delete(job._id);
+    }
+
+    await ctx.db.delete(args.id);
+  },
+});
+
 export const cancelRun = mutation({
   args: { id: v.id("scraperRuns") },
   handler: async (ctx, args) => {
