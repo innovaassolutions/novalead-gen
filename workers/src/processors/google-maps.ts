@@ -28,8 +28,7 @@ async function searchGoogleMaps(
 ): Promise<PlaceResult[]> {
   const params = new URLSearchParams({
     engine: "google_maps",
-    q: query,
-    ll: location, // lat,lng format or location string
+    q: `${query} in ${location}`,
     type: "search",
     api_key: apiKey,
   });
