@@ -10,12 +10,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Play } from "lucide-react";
 
+const COUNTRIES = [
+  { value: "us", label: "United States" },
+  { value: "ca", label: "Canada" },
+];
+
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
   "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
   "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
   "VA","WA","WV","WI","WY"
 ];
+
+const CA_PROVINCES = [
+  "AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"
+];
+
+const CA_PROVINCE_NAMES: Record<string, string> = {
+  AB: "Alberta", BC: "British Columbia", MB: "Manitoba", NB: "New Brunswick",
+  NL: "Newfoundland and Labrador", NS: "Nova Scotia", NT: "Northwest Territories",
+  NU: "Nunavut", ON: "Ontario", PE: "Prince Edward Island", QC: "Quebec",
+  SK: "Saskatchewan", YT: "Yukon",
+};
 
 interface ScraperConfigFormProps {
   scraperType: "google_maps" | "google_ads" | "linkedin_ads";
@@ -25,12 +41,16 @@ interface ScraperConfigFormProps {
 export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormProps) {
   const [query, setQuery] = useState("");
   const [name, setName] = useState("");
-  const [state, setState] = useState("all");
-  const [maxPerZip, setMaxPerZip] = useState("20");
+  const [country, setCountry] = useState("us");
+  const [region, setRegion] = useState("all");
+  const [maxPerLocation, setMaxPerLocation] = useState("20");
   const [starting, setStarting] = useState(false);
 
   const createRun = useMutation(api.scraperRuns.create);
   const createJob = useMutation(api.jobs.create);
+
+  const regions = country === "us" ? US_STATES : CA_PROVINCES;
+  const regionLabel = country === "us" ? "State" : "Province";
 
   const handleStart = async () => {
     if (!query.trim() || !name.trim()) return;
@@ -39,11 +59,11 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
     try {
       const config = {
         query: query.trim(),
-        state: state === "all" ? undefined : state,
-        maxPerZip: parseInt(maxPerZip) || 20,
+        country,
+        region: region === "all" ? undefined : region,
+        maxPerLocation: parseInt(maxPerLocation) || 20,
       };
 
-      // Create the scraper run record
       const runId = await createRun({
         type: scraperType,
         name: name.trim(),
@@ -51,7 +71,6 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
         totalJobs: 1,
       });
 
-      // Create the job
       await createJob({
         type: scraperType === "google_maps" ? "scrape_google_maps" :
               scraperType === "google_ads" ? "scrape_google_ads" : "scrape_linkedin_ads",
@@ -87,7 +106,7 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label>Run Name</Label>
-          <Input placeholder="e.g., Dentists Northeast Q1" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input placeholder="e.g., Dentists Ontario Q1" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="space-y-2">
           <Label>{label.queryLabel}</Label>
@@ -96,20 +115,33 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
         {scraperType === "google_maps" && (
           <>
             <div className="space-y-2">
-              <Label>State (US)</Label>
-              <Select value={state} onValueChange={setState}>
+              <Label>Country</Label>
+              <Select value={country} onValueChange={(v) => { setCountry(v); setRegion("all"); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All US States</SelectItem>
-                  {US_STATES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  {COUNTRIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Max Results Per Zip Code</Label>
-              <Input type="number" value={maxPerZip} onChange={(e) => setMaxPerZip(e.target.value)} min="1" max="60" />
+              <Label>{regionLabel}</Label>
+              <Select value={region} onValueChange={setRegion}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All {regionLabel}s</SelectItem>
+                  {regions.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {country === "ca" ? `${r} — ${CA_PROVINCE_NAMES[r]}` : r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Max Results Per Location</Label>
+              <Input type="number" value={maxPerLocation} onChange={(e) => setMaxPerLocation(e.target.value)} min="1" max="60" />
             </div>
           </>
         )}

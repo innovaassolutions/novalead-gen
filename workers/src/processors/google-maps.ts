@@ -73,8 +73,17 @@ function extractDomainFromUrl(url: string): string | undefined {
   }
 }
 
+// Build location string for SerpAPI from country + region
+function buildLocation(country?: string, region?: string): string {
+  const countryName = country === "ca" ? "Canada" : "United States";
+  if (region) {
+    return `${region}, ${countryName}`;
+  }
+  return countryName;
+}
+
 export async function processGoogleMaps(client: ConvexClient, job: any): Promise<any> {
-  const { query, zipCodes, scraperRunId } = job.payload;
+  const { query, zipCodes, country, region, scraperRunId } = job.payload;
 
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) {
@@ -85,7 +94,8 @@ export async function processGoogleMaps(client: ConvexClient, job: any): Promise
     throw new Error("query is required in job payload");
   }
 
-  const locations: string[] = zipCodes || [""];
+  // Support both old zip-code format and new country/region format
+  const locations: string[] = zipCodes || [buildLocation(country, region)];
   logger.info(
     `Starting Google Maps scrape: "${query}" across ${locations.length} location(s)`
   );
