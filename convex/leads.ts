@@ -139,6 +139,32 @@ export const batchCreate = mutation({
 
       created++;
       ids.push(id);
+
+      // Auto-queue email validation
+      await ctx.db.insert("jobs", {
+        type: "validate_email",
+        status: "pending",
+        priority: 5,
+        payload: { leadId: id, email: lead.email },
+        attempts: 0,
+        maxAttempts: 3,
+        createdAt: now,
+      });
+
+      // Auto-queue lead enrichment (uses company name from metadata if available)
+      await ctx.db.insert("jobs", {
+        type: "enrich_lead",
+        status: "pending",
+        priority: 4,
+        payload: {
+          leadId: id,
+          email: lead.email,
+          companyName: lead.metadata?.companyName,
+        },
+        attempts: 0,
+        maxAttempts: 3,
+        createdAt: now,
+      });
     }
 
     return { created, skipped, ids };
