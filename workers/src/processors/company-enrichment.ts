@@ -1,21 +1,24 @@
 import { ConvexClient } from "../convex-client";
 import { askClaude } from "../ai/claude-client";
-import { PROMPTS } from "../ai/prompts";
 import { logger } from "../utils/logger";
 import { extractJson } from "../utils/json";
 import { searchGoogle, fetchWebPage } from "../utils/web";
-import type { CompanyResearch } from "../types";
 
+/**
+ * Combined enrichment: researches the company AND finds contacts in a single
+ * SerpAPI search + single Claude call. This replaces the old separate
+ * enrich_company + enrich_lead flow, cutting costs by ~75%.
+ */
 export async function processCompanyEnrichment(client: ConvexClient, job: any): Promise<any> {
   const { companyName, domain, companyId } = job.payload;
 
-  logger.info(`Researching company: ${companyName} (${domain || "no domain"})`);
+  logger.info(`Enriching company + contacts: ${companyName} (${domain || "no domain"})`);
 
-  // Step 1: Search Google for company info
+  // Step 1: One Google search that covers both company info and people
   let searchData = "";
   try {
     const searchResults = await searchGoogle(
-      `"${companyName}" ${domain || ""} company info`,
+      `"${companyName}" ${domain || ""} owner OR team OR staff OR "about us"`,
     );
     if (searchResults.length > 0) {
       searchData = searchResults
@@ -27,21 +30,25 @@ export async function processCompanyEnrichment(client: ConvexClient, job: any): 
     logger.warn(`Google search failed for ${companyName}: ${e}`);
   }
 
-  // Step 2: Try to fetch the company homepage
+  // Step 2: Fetch the company website (try about/team pages first, then homepage)
   let websiteContent = "";
   if (domain) {
-    try {
-      const content = await fetchWebPage(`https://${domain}`);
-      if (content && content.length > 100) {
-        websiteContent = `Homepage content from ${domain}:\n${content.substring(0, 8000)}`;
-        logger.info(`Fetched ${domain} homepage (${content.length} chars)`);
+    const paths = ["/about", "/about-us", "/our-team", "/team", "/staff", "/"];
+    for (const path of paths) {
+      try {
+        const content = await fetchWebPage(`https://${domain}${path}`);
+        if (content && content.length > 100) {
+          websiteContent = `Content from ${domain}${path}:\n${content.substring(0, 8000)}`;
+          logger.info(`Fetched ${domain}${path} (${content.length} chars)`);
+          break;
+        }
+      } catch {
+        // Try next path
       }
-    } catch {
-      logger.debug(`Could not fetch ${domain}`);
     }
   }
 
-  // Step 3: Feed real data to Claude for research
+  // Step 3: Single Claude call for both company research + contact extraction
   const contextParts: string[] = [];
   if (searchData) contextParts.push(`GOOGLE SEARCH RESULTS:\n${searchData}`);
   if (websiteContent) contextParts.push(`WEBSITE CONTENT:\n${websiteContent}`);
@@ -49,68 +56,131 @@ export async function processCompanyEnrichment(client: ConvexClient, job: any): 
   const hasData = contextParts.length > 0;
   const context = hasData
     ? contextParts.join("\n\n---\n\n")
-    : "No web data found. Provide best estimates based on the company name and domain only.";
+    : "No web data found.";
 
-  const response = await askClaude(
-    PROMPTS.researchCompany.system,
-    PROMPTS.researchCompany.user(companyName, domain, context),
-  );
+  const systemPrompt = `You are a B2B company research assistant. You will be given a company name, optionally a website domain, and REAL DATA from Google search results and/or the company's website.
 
-  let research: CompanyResearch | null = null;
+Your job is to:
+1. Extract structured company information
+2. Find real people (owners, dentists, directors, managers, staff) mentioned in the data
+
+Return a JSON object with TWO sections:
+
+{
+  "company": {
+    "industry": "string",
+    "employeeCountEstimate": number,
+    "yearFounded": number or null,
+    "description": "1-2 sentence description",
+    "keyProducts": ["service1", "service2"],
+    "targetMarket": "who they serve",
+    "estimatedRevenue": "$X-$Y" or null,
+    "confidence": 0-100,
+    "reasoning": "what sources informed your analysis"
+  },
+  "contacts": [
+    {
+      "firstName": "string",
+      "lastName": "string",
+      "title": "Owner" or "Dentist" or their actual role,
+      "email": "firstname@domain.com" or null,
+      "confidence": 0-100,
+      "reasoning": "where in the data you found this person"
+    }
+  ]
+}
+
+CRITICAL RULES:
+- Only extract REAL people explicitly mentioned in the provided data
+- Do NOT fabricate or guess names that aren't in the data
+- Do NOT include LinkedIn URLs — we don't want guessed profiles
+- For email: only construct firstname@domain.com if the domain is provided AND the person's name is confirmed in the data
+- If no people are found, set contacts to an empty array
+- Base everything on the PROVIDED DATA, not guesswork
+- Only return the JSON object, no other text`;
+
+  const userPrompt = `Research "${companyName}"${domain ? ` (domain: ${domain})` : ""} and find any people/contacts mentioned.
+
+${context}`;
+
+  const response = await askClaude(systemPrompt, userPrompt);
+
+  let companyData: any = null;
+  let contacts: any[] = [];
+
   try {
     const parsed = extractJson(response.content);
-    research = {
-      industry: parsed.industry || "Unknown",
-      employeeCountEstimate: parsed.employeeCountEstimate || 0,
-      yearFounded: parsed.yearFounded,
-      description: parsed.description || "",
-      keyProducts: Array.isArray(parsed.keyProducts) ? parsed.keyProducts : [],
-      targetMarket: parsed.targetMarket || "",
-      estimatedRevenue: parsed.estimatedRevenue,
-      confidence: parsed.confidence || 0,
-      reasoning: parsed.reasoning || "",
-    };
+    companyData = parsed.company || null;
+    contacts = Array.isArray(parsed.contacts) ? parsed.contacts : [];
   } catch (e) {
-    logger.warn(`Failed to parse Claude company research response for ${companyName}: ${e}`);
+    logger.warn(`Failed to parse Claude response for ${companyName}: ${e}`);
     logger.debug(`Raw response: ${response.content.substring(0, 500)}`);
   }
 
-  if (research && research.confidence > 0) {
-    // Update the company record in Convex with enriched data
+  // Strip any LinkedIn URLs (Claude may still hallucinate them)
+  contacts = contacts.map((c: any) => ({ ...c, linkedinUrl: undefined }));
+
+  // Filter out contacts with no real name
+  contacts = contacts.filter((c: any) => c.firstName && c.lastName);
+
+  // Update company record
+  if (companyData) {
     await client.updateCompany(companyId, {
-      industry: research.industry,
-      employeeCount: research.employeeCountEstimate,
-      yearFounded: research.yearFounded,
-      description: research.description,
-      keyProducts: research.keyProducts,
-      targetMarket: research.targetMarket,
-      estimatedRevenue: research.estimatedRevenue,
+      industry: companyData.industry || undefined,
+      employeeCount: companyData.employeeCountEstimate || undefined,
+      yearFounded: companyData.yearFounded || undefined,
+      description: companyData.description || undefined,
+      keyProducts: Array.isArray(companyData.keyProducts) ? companyData.keyProducts : undefined,
+      targetMarket: companyData.targetMarket || undefined,
+      estimatedRevenue: companyData.estimatedRevenue || undefined,
       enrichedAt: Date.now(),
     });
+    logger.info(`Updated company record for ${companyName}`);
+  } else {
+    // Still mark as enriched even if no useful data — so we don't re-enrich
+    await client.updateCompany(companyId, { enrichedAt: Date.now() });
+  }
+
+  // Create leads from found contacts
+  if (contacts.length > 0) {
+    const leads = contacts.map((c: any) => ({
+      email: c.email || `${(c.firstName || "").toLowerCase()}@${domain || "unknown.com"}`,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      title: c.title,
+      source: "ai_enrichment" as const,
+      status: "enriched" as const,
+      companyId,
+      tags: ["ai-enriched"],
+      metadata: { confidence: c.confidence, reasoning: c.reasoning },
+    }));
+    await client.batchCreateLeads(leads);
+    logger.info(`Created ${leads.length} leads for ${companyName}`);
   }
 
   // Store enrichment record
+  const confidenceScore = companyData?.confidence || 0;
   await client.createEnrichment({
     companyId,
     provider: "claude",
     promptType: "research_company",
-    result: research || {},
-    confidenceScore: research?.confidence || 0,
-    reasoning: research
-      ? `Researched ${companyName}: ${research.industry}, ~${research.employeeCountEstimate} employees. ${hasData ? "Based on web search + website data." : "Based on name/domain only."}`
-      : `Failed to research ${companyName}`,
-    contactsFound: 0,
+    result: { company: companyData, contacts },
+    confidenceScore,
+    reasoning: companyData
+      ? `Researched ${companyName}: ${companyData.industry || "unknown industry"}, found ${contacts.length} contacts. ${hasData ? "Based on web search + website data." : "Limited data available."}`
+      : `Could not research ${companyName}. ${hasData ? "Web data found but extraction failed." : "No web data available."}`,
+    contactsFound: contacts.length,
     inputTokens: response.inputTokens,
     outputTokens: response.outputTokens,
     costUsd: response.costUsd,
-    status: research ? "completed" : "failed",
+    status: companyData ? "completed" : "failed",
   });
 
   return {
-    enriched: !!research && research.confidence > 0,
-    industry: research?.industry,
-    employeeCount: research?.employeeCountEstimate,
-    confidence: research?.confidence,
+    enriched: true,
+    contactsFound: contacts.length,
+    industry: companyData?.industry,
+    confidence: confidenceScore,
     cost: response.costUsd,
   };
 }

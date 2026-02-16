@@ -73,18 +73,6 @@ export default function CompaniesPage() {
           },
         });
         jobCount++;
-        if (company.domain) {
-          await createJob({
-            type: "enrich_lead",
-            priority: 5,
-            payload: {
-              companyName: company.name,
-              domain: company.domain,
-              companyId: company._id,
-            },
-          });
-          jobCount++;
-        }
       }
       setSelected(new Set());
       setFeedback(`Queued ${jobCount} enrichment jobs for ${toEnrich.length} companies. Railway worker will process them shortly.`);

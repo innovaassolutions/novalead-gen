@@ -32,6 +32,7 @@ export default function LeadDetailPage({
     id: id as Id<"leads">,
   });
   const updateStatus = useMutation(api.leads.updateStatus);
+  const createJob = useMutation(api.jobs.create);
 
   if (lead === undefined) {
     return (
@@ -240,32 +241,37 @@ export default function LeadDetailPage({
             <CardTitle>Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {lead.status === "validated" && (
-              <>
-                <Button
-                  className="w-full"
-                  onClick={() =>
-                    updateStatus({
-                      id: lead._id,
-                      status: "pushed_to_crm",
-                    })
-                  }
-                >
-                  <Send className="mr-2 h-4 w-4" /> Push to NovaCRM
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() =>
-                    updateStatus({
-                      id: lead._id,
-                      status: "pushed_to_instantly",
-                    })
-                  }
-                >
-                  <Mail className="mr-2 h-4 w-4" /> Add to Campaign
-                </Button>
-              </>
+            {(lead.status === "enriched" || lead.status === "validated") && lead.status !== "pushed_to_crm" && (
+              <Button
+                className="w-full"
+                onClick={async () => {
+                  await createJob({
+                    type: "push_to_crm",
+                    priority: 8,
+                    payload: {
+                      leadId: lead._id,
+                      lead: {
+                        email: lead.email,
+                        firstName: lead.firstName,
+                        lastName: lead.lastName,
+                        phone: lead.phone,
+                        title: lead.title,
+                        companyName: lead.company?.name,
+                        industry: lead.company?.industry,
+                        source: lead.source,
+                      },
+                    },
+                  });
+                  await updateStatus({ id: lead._id, status: "pushed_to_crm" });
+                }}
+              >
+                <Send className="mr-2 h-4 w-4" /> Push to NovaCRM
+              </Button>
+            )}
+            {lead.status === "pushed_to_crm" && (
+              <div className="text-sm text-green-600 font-medium text-center py-2">
+                Pushed to NovaCRM
+              </div>
             )}
             {lead.status === "raw" && (
               <Button

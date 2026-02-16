@@ -162,33 +162,11 @@ export async function processGoogleMaps(client: ConvexClient, job: any): Promise
       const createdIds: string[] = batchResult?.ids || [];
       totalCompanies += createdIds.length;
 
-      // Create lead enrichment jobs for each company that has a website
+      // Create one combined enrichment job per company (company research + contact discovery)
       for (const companyData of companies) {
         const companyId = createdIds.shift();
         if (!companyId) continue;
 
-        // Create an enrich_lead job for companies with domains
-        if (companyData.domain) {
-          try {
-            await client.createJob({
-              type: "enrich_lead",
-              payload: {
-                companyName: companyData.name,
-                domain: companyData.domain,
-                companyId,
-              },
-              priority: 5,
-              createdAt: Date.now(),
-            });
-            totalEnrichJobs++;
-          } catch (error) {
-            logger.warn(
-              `Failed to create enrich job for ${companyData.name}: ${error}`
-            );
-          }
-        }
-
-        // Also create a company enrichment job
         try {
           await client.createJob({
             type: "enrich_company",
@@ -197,12 +175,12 @@ export async function processGoogleMaps(client: ConvexClient, job: any): Promise
               domain: companyData.domain,
               companyId,
             },
-            priority: 3,
-            createdAt: Date.now(),
+            priority: 5,
           });
+          totalEnrichJobs++;
         } catch (error) {
           logger.warn(
-            `Failed to create company enrich job for ${companyData.name}: ${error}`
+            `Failed to create enrich job for ${companyData.name}: ${error}`
           );
         }
       }
