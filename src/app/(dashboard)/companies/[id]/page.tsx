@@ -78,6 +78,11 @@ export default function CompanyDetailPage({
           )}
         </div>
         <Badge variant="secondary">{company.source.replace(/_/g, " ")}</Badge>
+        {company.enrichedAt ? (
+          <Badge className="bg-green-600 hover:bg-green-600 text-white">Enriched</Badge>
+        ) : (
+          <Badge variant="secondary">Not enriched</Badge>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -89,16 +94,49 @@ export default function CompanyDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {company.description && (
+              <p className="text-sm">{company.description}</p>
+            )}
             {company.industry && (
               <div className="text-sm">
                 <span className="text-muted-foreground">Industry:</span>{" "}
                 {company.industry}
               </div>
             )}
+            {company.category && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">Category:</span>{" "}
+                {company.category}
+              </div>
+            )}
             {company.employeeCount && (
               <div className="text-sm">
                 <span className="text-muted-foreground">Employees:</span>{" "}
                 {company.employeeCount.toLocaleString()}
+              </div>
+            )}
+            {company.yearFounded && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">Founded:</span>{" "}
+                {company.yearFounded}
+              </div>
+            )}
+            {company.estimatedRevenue && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">Est. Revenue:</span>{" "}
+                {company.estimatedRevenue}
+              </div>
+            )}
+            {company.targetMarket && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">Target Market:</span>{" "}
+                {company.targetMarket}
+              </div>
+            )}
+            {company.keyProducts && company.keyProducts.length > 0 && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">Key Services:</span>{" "}
+                {company.keyProducts.join(", ")}
               </div>
             )}
             {company.yearsInBusiness && (
