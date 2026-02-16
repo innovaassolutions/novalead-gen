@@ -1,7 +1,7 @@
 import { ConvexClient } from "../convex-client";
 import { logger } from "../utils/logger";
 import { withRetry } from "../utils/retry";
-import type { NovaCrmLeadPayload } from "../../../shared/types";
+import type { NovaCrmLeadPayload } from "../types";
 
 export async function processPushToCrm(client: ConvexClient, job: any): Promise<any> {
   const { leadId, lead } = job.payload;

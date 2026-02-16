@@ -2,7 +2,7 @@ import { ConvexClient } from "../convex-client";
 import { logger } from "../utils/logger";
 import { withRetry } from "../utils/retry";
 import { RateLimiter } from "../utils/rate-limiter";
-import type { InstantlyLeadPayload } from "../../../shared/types";
+import type { InstantlyLeadPayload } from "../types";
 
 // Instantly API rate limit: be conservative, ~10 requests per second
 const rateLimiter = new RateLimiter(10, 1000);

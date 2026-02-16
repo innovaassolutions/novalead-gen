@@ -2,7 +2,7 @@ import { ConvexClient } from "../convex-client";
 import { askClaude } from "../ai/claude-client";
 import { PROMPTS } from "../ai/prompts";
 import { logger } from "../utils/logger";
-import type { CompanyResearch } from "../../../shared/types";
+import type { CompanyResearch } from "../types";
 
 export async function processCompanyEnrichment(client: ConvexClient, job: any): Promise<any> {
   const { companyName, domain, companyId } = job.payload;
