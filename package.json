@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "dev:convex": "npx convex dev",
-    "build": "next build",
+    "build": "npx convex deploy --cmd 'next build'",
     "start": "next start",
     "lint": "eslint"
   },

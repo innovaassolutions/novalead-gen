@@ -37,9 +37,6 @@ yarn-error.log*
 # vercel
 .vercel
 
-# convex generated
-convex/_generated/
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
