@@ -23,6 +23,7 @@ export default function CompaniesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [enriching, setEnriching] = useState(false);
   const [view, setView] = useState<"cards" | "list">("list");
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const isLoading = status === "LoadingFirstPage";
   const canLoadMore = status === "CanLoadMore";
@@ -51,9 +52,15 @@ export default function CompaniesPage() {
     const toEnrich = results.filter(
       (c) => selected.has(c._id) && !c.enrichedAt
     );
-    if (toEnrich.length === 0) return;
+    if (toEnrich.length === 0) {
+      setFeedback("All selected companies are already enriched.");
+      setTimeout(() => setFeedback(null), 3000);
+      return;
+    }
 
     setEnriching(true);
+    setFeedback(null);
+    let jobCount = 0;
     try {
       for (const company of toEnrich) {
         await createJob({
@@ -65,6 +72,7 @@ export default function CompaniesPage() {
             companyId: company._id,
           },
         });
+        jobCount++;
         if (company.domain) {
           await createJob({
             type: "enrich_lead",
@@ -75,11 +83,16 @@ export default function CompaniesPage() {
               companyId: company._id,
             },
           });
+          jobCount++;
         }
       }
       setSelected(new Set());
+      setFeedback(`Queued ${jobCount} enrichment jobs for ${toEnrich.length} companies. Railway worker will process them shortly.`);
+      setTimeout(() => setFeedback(null), 5000);
     } catch (error) {
       console.error("Failed to create enrichment jobs:", error);
+      setFeedback(`Error: ${error instanceof Error ? error.message : "Failed to create jobs"}`);
+      setTimeout(() => setFeedback(null), 5000);
     } finally {
       setEnriching(false);
     }
@@ -146,6 +159,12 @@ export default function CompaniesPage() {
           )}
         </div>
       </div>
+
+      {feedback && (
+        <div className={`rounded-md border px-4 py-3 text-sm ${feedback.startsWith("Error") ? "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200" : "border-green-300 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200"}`}>
+          {feedback}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-2">
