@@ -64,9 +64,22 @@ http.route({
       return new Response("Unauthorized", { status: 401 });
     }
     const body = await request.json();
-    const result = await ctx.runMutation(api.leads.batchCreate, {
-      leads: body.leads,
-    });
+    // Strip createdAt/updatedAt from each lead — mutation sets these internally
+    const leads = (body.leads || []).map((lead: any) => ({
+      email: lead.email,
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      title: lead.title,
+      phone: lead.phone,
+      linkedinUrl: lead.linkedinUrl,
+      personalEmail: lead.personalEmail,
+      source: lead.source,
+      status: lead.status,
+      companyId: lead.companyId,
+      tags: lead.tags,
+      metadata: lead.metadata,
+    }));
+    const result = await ctx.runMutation(api.leads.batchCreate, { leads });
     return Response.json(result);
   }),
 });
@@ -119,7 +132,21 @@ http.route({
       return new Response("Unauthorized", { status: 401 });
     }
     const body = await request.json();
-    const id = await ctx.runMutation(api.enrichments.create, body);
+    const id = await ctx.runMutation(api.enrichments.create, {
+      leadId: body.leadId,
+      companyId: body.companyId,
+      provider: body.provider,
+      promptType: body.promptType,
+      result: body.result,
+      confidenceScore: body.confidenceScore,
+      reasoning: body.reasoning,
+      contactsFound: body.contactsFound,
+      inputTokens: body.inputTokens,
+      outputTokens: body.outputTokens,
+      costUsd: body.costUsd,
+      status: body.status,
+      error: body.error,
+    });
     return Response.json({ id });
   }),
 });
@@ -185,8 +212,28 @@ http.route({
       return new Response("Unauthorized", { status: 401 });
     }
     const body = await request.json();
-    const { companyId, ...data } = body;
-    await ctx.runMutation(api.companies.update, { id: companyId, ...data });
+    await ctx.runMutation(api.companies.update, {
+      id: body.companyId,
+      name: body.name,
+      domain: body.domain,
+      website: body.website,
+      phone: body.phone,
+      address: body.address,
+      city: body.city,
+      state: body.state,
+      zipCode: body.zipCode,
+      country: body.country,
+      category: body.category,
+      industry: body.industry,
+      employeeCount: body.employeeCount,
+      yearFounded: body.yearFounded,
+      description: body.description,
+      keyProducts: body.keyProducts,
+      targetMarket: body.targetMarket,
+      estimatedRevenue: body.estimatedRevenue,
+      enrichedAt: body.enrichedAt,
+      metadata: body.metadata,
+    });
     return Response.json({ success: true });
   }),
 });
