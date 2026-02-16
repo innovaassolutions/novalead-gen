@@ -2,6 +2,7 @@ import { ConvexClient } from "../convex-client";
 import { askClaude } from "../ai/claude-client";
 import { PROMPTS } from "../ai/prompts";
 import { logger } from "../utils/logger";
+import { extractJson } from "../utils/json";
 import type { CompanyResearch } from "../types";
 
 export async function processCompanyEnrichment(client: ConvexClient, job: any): Promise<any> {
@@ -16,7 +17,7 @@ export async function processCompanyEnrichment(client: ConvexClient, job: any): 
 
   let research: CompanyResearch | null = null;
   try {
-    const parsed = JSON.parse(response.content);
+    const parsed = extractJson(response.content);
     research = {
       industry: parsed.industry || "Unknown",
       employeeCountEstimate: parsed.employeeCountEstimate || 0,
@@ -28,8 +29,9 @@ export async function processCompanyEnrichment(client: ConvexClient, job: any): 
       confidence: parsed.confidence || 0,
       reasoning: parsed.reasoning || "",
     };
-  } catch {
-    logger.warn(`Failed to parse Claude company research response for ${companyName}`);
+  } catch (e) {
+    logger.warn(`Failed to parse Claude company research response for ${companyName}: ${e}`);
+    logger.debug(`Raw response: ${response.content.substring(0, 500)}`);
   }
 
   if (research) {

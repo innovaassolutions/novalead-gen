@@ -2,6 +2,7 @@ import { ConvexClient } from "../convex-client";
 import { askClaude } from "../ai/claude-client";
 import { PROMPTS } from "../ai/prompts";
 import { logger } from "../utils/logger";
+import { extractJson } from "../utils/json";
 
 export async function processLeadEnrichment(client: ConvexClient, job: any): Promise<any> {
   const { companyName, domain, companyId } = job.payload;
@@ -15,10 +16,11 @@ export async function processLeadEnrichment(client: ConvexClient, job: any): Pro
 
   let contacts: any[] = [];
   try {
-    contacts = JSON.parse(response.content);
-    if (!Array.isArray(contacts)) contacts = [];
-  } catch {
-    logger.warn(`Failed to parse Claude response for ${companyName}`);
+    const parsed = extractJson(response.content);
+    contacts = Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    logger.warn(`Failed to parse Claude response for ${companyName}: ${e}`);
+    logger.debug(`Raw response: ${response.content.substring(0, 500)}`);
     contacts = [];
   }
 
