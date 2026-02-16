@@ -61,7 +61,10 @@ export default function CampaignsPage() {
                       <Megaphone className="h-4 w-4" />
                       {campaign.name}
                     </CardTitle>
-                    <Badge variant={STATUS_VARIANT[campaign.status] ?? "secondary"}>
+                    <Badge
+                      variant={STATUS_VARIANT[campaign.status] ?? "secondary"}
+                      className={campaign.status === "completed" ? "bg-green-600 hover:bg-green-600 text-white" : ""}
+                    >
                       {campaign.status}
                     </Badge>
                   </div>

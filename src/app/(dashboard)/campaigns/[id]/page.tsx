@@ -42,7 +42,10 @@ export default function CampaignDetailPage({
         </Link>
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold">{campaign.name}</h1>
-          <Badge variant={campaign.status === "active" ? "default" : "secondary"}>
+          <Badge
+            variant={campaign.status === "active" ? "default" : "secondary"}
+            className={campaign.status === "completed" ? "bg-green-600 hover:bg-green-600 text-white" : ""}
+          >
             {campaign.status}
           </Badge>
         </div>

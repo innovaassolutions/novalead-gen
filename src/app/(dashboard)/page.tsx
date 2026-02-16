@@ -67,7 +67,10 @@ export default function DashboardPage() {
                     <span>{job.type.replace(/_/g, " ")}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={job.status === "completed" ? "default" : "destructive"} className="text-xs">
+                    <Badge
+                      variant={job.status === "failed" ? "destructive" : "secondary"}
+                      className={`text-xs ${job.status === "completed" ? "bg-green-600 hover:bg-green-600 text-white" : ""}`}
+                    >
                       {job.status}
                     </Badge>
                     <span className="text-xs text-muted-foreground flex items-center gap-1">

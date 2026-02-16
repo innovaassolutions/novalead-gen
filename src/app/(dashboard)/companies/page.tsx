@@ -4,13 +4,13 @@ import { useState } from "react";
 import { usePaginatedQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Globe, MapPin, Star, CheckCircle2, Sparkles, Loader2 } from "lucide-react";
+import { Building2, Globe, MapPin, Star, CheckCircle2, Sparkles, Loader2, LayoutGrid, List } from "lucide-react";
 import Link from "next/link";
-import { Id } from "../../../../convex/_generated/dataModel";
 
 export default function CompaniesPage() {
   const { results, status, loadMore } = usePaginatedQuery(
@@ -22,6 +22,7 @@ export default function CompaniesPage() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [enriching, setEnriching] = useState(false);
+  const [view, setView] = useState<"cards" | "list">("list");
 
   const isLoading = status === "LoadingFirstPage";
   const canLoadMore = status === "CanLoadMore";
@@ -55,7 +56,6 @@ export default function CompaniesPage() {
     setEnriching(true);
     try {
       for (const company of toEnrich) {
-        // Create enrich_company job
         await createJob({
           type: "enrich_company",
           priority: 5,
@@ -65,7 +65,6 @@ export default function CompaniesPage() {
             companyId: company._id,
           },
         });
-        // Create enrich_lead job if company has a domain
         if (company.domain) {
           await createJob({
             type: "enrich_lead",
@@ -102,6 +101,24 @@ export default function CompaniesPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center border rounded-md">
+            <Button
+              variant={view === "cards" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setView("cards")}
+              className="rounded-r-none"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={view === "list" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setView("list")}
+              className="rounded-l-none"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
           {results.length > 0 && (
             <div className="flex items-center gap-2">
               <Checkbox
@@ -131,10 +148,91 @@ export default function CompaniesPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-40" />
+            <Skeleton key={i} className="h-12 w-full" />
           ))}
+        </div>
+      ) : view === "list" ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10"></TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead>Domain</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-center">Rating</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {results.map((company) => (
+                <TableRow
+                  key={company._id}
+                  className={selected.has(company._id) ? "bg-muted/50" : ""}
+                >
+                  <TableCell>
+                    <Checkbox
+                      checked={selected.has(company._id)}
+                      onCheckedChange={() => toggleSelect(company._id)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/companies/${company._id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {company.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {company.domain && (
+                      <span className="flex items-center gap-1">
+                        <Globe className="h-3 w-3" /> {company.domain}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {company.address && (
+                      <span className="flex items-center gap-1 max-w-[200px] truncate">
+                        <MapPin className="h-3 w-3 shrink-0" /> {company.address}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {(company.category || company.industry) && (
+                      <Badge variant="outline" className="text-xs">
+                        {company.category || company.industry}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {company.googleRating ? (
+                      <span className="flex items-center justify-center gap-1 text-sm">
+                        <Star className="h-3 w-3 text-yellow-500" />
+                        {company.googleRating}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {company.enrichedAt ? (
+                      <Badge className="gap-1 bg-green-600 hover:bg-green-600 text-white text-xs">
+                        <CheckCircle2 className="h-3 w-3" /> Enriched
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">
+                        Not enriched
+                      </Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
