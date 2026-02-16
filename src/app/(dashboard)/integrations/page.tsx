@@ -52,7 +52,7 @@ export default function IntegrationsPage() {
           <CardContent className="space-y-4">
             <div className="flex items-center gap-2 text-sm">
               Status: {instantlyConnected ? (
-                <Badge variant="default" className="gap-1"><CheckCircle className="h-3 w-3" /> Connected</Badge>
+                <Badge className="gap-1 bg-green-600 hover:bg-green-600 text-white"><CheckCircle className="h-3 w-3" /> Connected</Badge>
               ) : (
                 <Badge variant="secondary" className="gap-1"><XCircle className="h-3 w-3" /> Not configured</Badge>
               )}
@@ -76,7 +76,7 @@ export default function IntegrationsPage() {
             <div className="flex items-center gap-2 text-sm">
               Status: {novaCrmConnected ? (
                 <>
-                  <Badge variant="default" className="gap-1"><CheckCircle className="h-3 w-3" /> Connected</Badge>
+                  <Badge className="gap-1 bg-green-600 hover:bg-green-600 text-white"><CheckCircle className="h-3 w-3" /> Connected</Badge>
                   {novaCrmSource === "env" && <span className="text-xs text-muted-foreground">(via env vars)</span>}
                 </>
               ) : (
