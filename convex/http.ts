@@ -147,7 +147,14 @@ http.route({
       return new Response("Unauthorized", { status: 401 });
     }
     const body = await request.json();
-    const id = await ctx.runMutation(api.jobs.create, body);
+    // Only pass fields the mutation accepts — strip createdAt, etc.
+    const id = await ctx.runMutation(api.jobs.create, {
+      type: body.type,
+      priority: body.priority,
+      payload: body.payload,
+      maxAttempts: body.maxAttempts,
+      scraperRunId: body.scraperRunId,
+    });
     return Response.json({ id });
   }),
 });
