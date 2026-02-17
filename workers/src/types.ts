@@ -61,6 +61,7 @@ export interface EnrichedContact {
   lastName: string;
   title: string;
   email: string;
+  phone?: string;
   linkedinUrl?: string;
   confidence: number;
   reasoning: string;

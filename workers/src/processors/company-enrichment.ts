@@ -84,6 +84,7 @@ Return a JSON object with TWO sections:
       "lastName": "string",
       "title": "Owner" or "Dentist" or their actual role,
       "email": "firstname@domain.com" or null,
+      "phone": "direct phone number" or null,
       "confidence": 0-100,
       "reasoning": "where in the data you found this person"
     }
@@ -95,6 +96,7 @@ CRITICAL RULES:
 - Do NOT fabricate or guess names that aren't in the data
 - Do NOT include LinkedIn URLs — we don't want guessed profiles
 - For email: only construct firstname@domain.com if the domain is provided AND the person's name is confirmed in the data
+- For phone: only include a phone number if it is explicitly listed in the data as a direct or personal number for that contact. Do NOT use the main company phone number — we already store that separately.
 - If no people are found, set contacts to an empty array
 - Base everything on the PROVIDED DATA, not guesswork
 - Only return the JSON object, no other text`;
@@ -148,6 +150,7 @@ ${context}`;
       firstName: c.firstName,
       lastName: c.lastName,
       title: c.title,
+      phone: c.phone || undefined,
       source: "ai_enrichment" as const,
       status: "enriched" as const,
       companyId,
