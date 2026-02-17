@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ColumnDef,
   flexRender,
@@ -195,18 +195,17 @@ export function LeadTable({
     getSortedRowModel: getSortedRowModel(),
     enableRowSelection: true,
     onSortingChange: setSorting,
-    onRowSelectionChange: (updater) => {
-      const next = typeof updater === "function" ? updater(rowSelection) : updater;
-      setRowSelection(next);
-      if (onSelectionChange) {
-        // Keys are _id strings (from getRowId), not indices
-        const selectedIds = Object.keys(next).filter((key) => next[key]);
-        onSelectionChange(selectedIds);
-      }
-    },
+    onRowSelectionChange: setRowSelection,
     state: { sorting, rowSelection },
     getRowId: (row) => row._id,
   });
+
+  useEffect(() => {
+    if (onSelectionChange) {
+      const selectedIds = Object.keys(rowSelection).filter((key) => rowSelection[key]);
+      onSelectionChange(selectedIds);
+    }
+  }, [rowSelection, onSelectionChange]);
 
   if (isLoading) {
     return (
