@@ -20,6 +20,7 @@ export function isHyperbrowserAvailable(): boolean {
 
 /**
  * Scrape a URL and return its content as markdown.
+ * Uses proxy + CAPTCHA solving for sites like Google.
  */
 export async function scrapePage(url: string): Promise<{ markdown: string; metadata: any } | null> {
   const hb = getClient();
@@ -28,8 +29,12 @@ export async function scrapePage(url: string): Promise<{ markdown: string; metad
       url,
       scrapeOptions: {
         formats: ["markdown"],
-        onlyMainContent: true,
+        onlyMainContent: false,
         timeout: 30000,
+      },
+      sessionOptions: {
+        useProxy: true,
+        solveCaptchas: true,
       },
     });
 
@@ -50,6 +55,7 @@ export async function scrapePage(url: string): Promise<{ markdown: string; metad
 
 /**
  * Extract structured data from a URL using AI.
+ * Uses proxy + CAPTCHA solving for anti-bot protection.
  */
 export async function extractFromPage(
   url: string,
@@ -62,6 +68,10 @@ export async function extractFromPage(
       urls: [url],
       prompt,
       schema,
+      sessionOptions: {
+        useProxy: true,
+        solveCaptchas: true,
+      },
     });
 
     if (result.status === "completed" && result.data) {
@@ -78,7 +88,8 @@ export async function extractFromPage(
 
 /**
  * Search Google for a query and extract advertisers from the results page.
- * Uses a real browser to see actual paid ads.
+ * Uses a real browser with proxy to see actual paid ads.
+ * Falls back to scrape+parse if extract returns 0 results.
  */
 export async function searchGoogleAds(
   query: string,
@@ -90,15 +101,18 @@ export async function searchGoogleAds(
 
   logger.info(`Hyperbrowser: scraping Google ads from ${url}`);
 
+  // Try extract first (AI-powered structured extraction)
   const data = await extractFromPage(
     url,
     `Extract ALL paid advertisers from this Google search results page.
-Include:
+Look for:
 - Sponsored/paid ads at the top and bottom of the page (marked with "Sponsored" or "Ad" label)
 - Local sponsored results in the map pack (marked as "Sponsored")
 - Shopping ads
+- Any results marked as advertisements
 For each advertiser, extract their business name, website domain, landing page URL, and the ad text/description.
-If there are no paid ads, return an empty array.`,
+Also extract businesses from organic results — these are active businesses even if not currently running ads.
+If this appears to be a consent page, CAPTCHA, or error page rather than search results, return an empty array.`,
     {
       type: "object",
       properties: {
@@ -111,7 +125,7 @@ If there are no paid ads, return an empty array.`,
               domain: { type: "string", description: "The website domain (e.g., example.com)" },
               landingPageUrl: { type: "string", description: "The full URL the ad links to" },
               adText: { type: "string", description: "The ad copy/description text" },
-              adType: { type: "string", description: "Type of ad: 'search_ad', 'local_ad', 'shopping_ad'" },
+              adType: { type: "string", description: "Type: 'sponsored_ad', 'local_ad', 'shopping_ad', 'organic'" },
             },
             required: ["businessName"],
           },
@@ -121,13 +135,75 @@ If there are no paid ads, return an empty array.`,
     },
   );
 
-  if (!data || !data.advertisers) {
-    logger.warn(`No advertisers extracted for query "${query}"`);
-    return { advertisers: [] };
+  if (data?.advertisers?.length > 0) {
+    logger.info(`Hyperbrowser extract found ${data.advertisers.length} advertisers for "${query}"`);
+    return data;
   }
 
-  logger.info(`Hyperbrowser found ${data.advertisers.length} advertisers for "${query}"`);
-  return data;
+  // Extract returned 0 — scrape the page to debug what's actually there
+  logger.warn(`Extract returned 0 advertisers for "${query}", falling back to scrape+debug`);
+
+  const scraped = await scrapePage(url);
+  if (scraped) {
+    const preview = scraped.markdown.substring(0, 1000);
+    logger.info(`Page content preview for "${query}":\n${preview}`);
+
+    // Try to parse advertisers from the markdown manually
+    const advertisers = parseAdvertisersFromMarkdown(scraped.markdown);
+    if (advertisers.length > 0) {
+      logger.info(`Parsed ${advertisers.length} businesses from page markdown for "${query}"`);
+      return { advertisers };
+    }
+  } else {
+    logger.error(`Scrape also failed for "${query}"`);
+  }
+
+  logger.warn(`No advertisers found for query "${query}" via any method`);
+  return { advertisers: [] };
+}
+
+/**
+ * Parse business listings from Google search results markdown.
+ * Fallback when AI extract returns nothing.
+ */
+function parseAdvertisersFromMarkdown(markdown: string): GoogleAdResult[] {
+  const results: GoogleAdResult[] = [];
+  const seen = new Set<string>();
+
+  // Look for markdown links that look like business listings
+  // Pattern: [Business Name](https://example.com/...)
+  const linkPattern = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g;
+  let match;
+
+  while ((match = linkPattern.exec(markdown)) !== null) {
+    const title = match[1].trim();
+    const url = match[2];
+
+    // Skip Google internal links, navigation, etc.
+    if (url.includes("google.com") || url.includes("google.ca")) continue;
+    if (url.includes("youtube.com") || url.includes("wikipedia.org")) continue;
+    if (title.length < 3 || title.length > 100) continue;
+
+    let domain: string | undefined;
+    try {
+      domain = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      continue;
+    }
+
+    if (!seen.has(domain)) {
+      seen.add(domain);
+      results.push({
+        businessName: title,
+        domain,
+        landingPageUrl: url,
+        adText: "",
+        adType: "organic",
+      });
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -144,6 +220,7 @@ export async function searchLinkedInAds(
     url,
     `Extract ALL advertisers shown on this LinkedIn Ad Library search results page.
 For each advertiser, extract their company name, LinkedIn profile URL, and any ad content or description visible.
+If this appears to be a login wall, consent page, or error page, return an empty array.
 If there are no results, return an empty array.`,
     {
       type: "object",
@@ -165,13 +242,20 @@ If there are no results, return an empty array.`,
     },
   );
 
-  if (!data || !data.advertisers) {
-    logger.warn(`No LinkedIn advertisers extracted for query "${query}"`);
-    return { advertisers: [] };
+  if (data?.advertisers?.length > 0) {
+    logger.info(`Hyperbrowser found ${data.advertisers.length} LinkedIn advertisers for "${query}"`);
+    return data;
   }
 
-  logger.info(`Hyperbrowser found ${data.advertisers.length} LinkedIn advertisers for "${query}"`);
-  return data;
+  // Fallback: scrape and log what's on the page
+  logger.warn(`Extract returned 0 LinkedIn advertisers for "${query}", falling back to scrape+debug`);
+  const scraped = await scrapePage(url);
+  if (scraped) {
+    const preview = scraped.markdown.substring(0, 1000);
+    logger.info(`LinkedIn page content preview for "${query}":\n${preview}`);
+  }
+
+  return { advertisers: [] };
 }
 
 export interface GoogleAdResult {
