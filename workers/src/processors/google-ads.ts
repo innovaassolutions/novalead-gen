@@ -226,14 +226,20 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
         companiesFound: totalCompanies,
       });
 
-      let ads: AdResult[];
+      let ads: AdResult[] = [];
 
+      // Try Hyperbrowser first, fall back to SerpAPI if it returns 0 (e.g., CAPTCHA blocked)
       if (useHyperbrowser) {
-        ads = await withRetry(
-          () => searchAdsWithHyperbrowser(fullQuery, country),
-          { maxRetries: 2, delayMs: 5000, backoff: 2 },
-        );
-      } else {
+        ads = await searchAdsWithHyperbrowser(fullQuery, country);
+        if (ads.length === 0 && serpApiKey) {
+          logger.info(`Hyperbrowser returned 0 for "${query}", falling back to SerpAPI`);
+          await rateLimiter.wait();
+          ads = await withRetry(
+            () => searchAdsWithSerpApi(fullQuery, serpApiKey!, serpLocation, glCountry),
+            { maxRetries: 2, delayMs: 3000, backoff: 2 },
+          );
+        }
+      } else if (serpApiKey) {
         await rateLimiter.wait();
         ads = await withRetry(
           () => searchAdsWithSerpApi(fullQuery, serpApiKey!, serpLocation, glCountry),

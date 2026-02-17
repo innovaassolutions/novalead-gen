@@ -153,14 +153,20 @@ export async function processLinkedInAds(client: ConvexClient, job: any): Promis
         companiesFound: totalCompanies,
       });
 
-      let ads: AdResult[];
+      let ads: AdResult[] = [];
 
+      // Try Hyperbrowser first, fall back to SerpAPI if it returns 0
       if (useHyperbrowser) {
-        ads = await withRetry(
-          () => searchWithHyperbrowser(query),
-          { maxRetries: 2, delayMs: 5000, backoff: 2 },
-        );
-      } else {
+        ads = await searchWithHyperbrowser(query);
+        if (ads.length === 0 && serpApiKey) {
+          logger.info(`Hyperbrowser returned 0 for "${query}", falling back to SerpAPI`);
+          await rateLimiter.wait();
+          ads = await withRetry(
+            () => searchWithSerpApi(query, serpApiKey!, serpLocation, glCountry),
+            { maxRetries: 2, delayMs: 5000, backoff: 2 },
+          );
+        }
+      } else if (serpApiKey) {
         await rateLimiter.wait();
         ads = await withRetry(
           () => searchWithSerpApi(query, serpApiKey!, serpLocation, glCountry),
