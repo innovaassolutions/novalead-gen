@@ -8,6 +8,7 @@ import {
   useReactTable,
   getSortedRowModel,
   SortingState,
+  RowSelectionState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -19,12 +20,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
 
-type Lead = {
+export type Lead = {
   _id: string;
   email: string;
   firstName?: string;
@@ -38,6 +40,27 @@ type Lead = {
 };
 
 const columns: ColumnDef<Lead>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && "indeterminate")
+        }
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+  },
   {
     accessorKey: "name",
     header: "Name",
@@ -156,19 +179,33 @@ const columns: ColumnDef<Lead>[] = [
 export function LeadTable({
   leads,
   isLoading,
+  onSelectionChange,
 }: {
   leads: Lead[];
   isLoading?: boolean;
+  onSelectionChange?: (selectedIds: string[]) => void;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const table = useReactTable({
     data: leads,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    enableRowSelection: true,
     onSortingChange: setSorting,
-    state: { sorting },
+    onRowSelectionChange: (updater) => {
+      const next = typeof updater === "function" ? updater(rowSelection) : updater;
+      setRowSelection(next);
+      if (onSelectionChange) {
+        // Keys are _id strings (from getRowId), not indices
+        const selectedIds = Object.keys(next).filter((key) => next[key]);
+        onSelectionChange(selectedIds);
+      }
+    },
+    state: { sorting, rowSelection },
+    getRowId: (row) => row._id,
   });
 
   if (isLoading) {
@@ -203,7 +240,10 @@ export function LeadTable({
         <TableBody>
           {table.getRowModel().rows.length ? (
             table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() && "selected"}
+              >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
