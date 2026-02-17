@@ -117,6 +117,8 @@ export default defineSchema({
       v.literal("enrich_lead"),
       v.literal("enrich_company"),
       v.literal("validate_email"),
+      v.literal("scrape_google_ads"),    // deprecated — kept for existing records
+      v.literal("scrape_linkedin_ads"),  // deprecated — kept for existing records
       v.literal("generate_analytics"),
       v.literal("push_to_crm"),
       v.literal("push_to_instantly")
@@ -147,7 +149,11 @@ export default defineSchema({
     .index("by_worker", ["workerId"]),
 
   scraperRuns: defineTable({
-    type: v.literal("google_maps"),
+    type: v.union(
+      v.literal("google_maps"),
+      v.literal("google_ads"),      // deprecated — kept for existing records
+      v.literal("linkedin_ads")     // deprecated — kept for existing records
+    ),
     status: v.union(
       v.literal("pending"),
       v.literal("running"),
