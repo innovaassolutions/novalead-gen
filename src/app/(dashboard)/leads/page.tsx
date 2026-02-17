@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { LeadTable } from "@/components/leads/lead-table";
 import { LeadFilters } from "@/components/leads/lead-filters";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export default function LeadsPage() {
   const [status, setStatus] = useState<string | undefined>();
   const [source, setSource] = useState<string | undefined>();
   const [search, setSearch] = useState("");
+
+  const batchPushToCrm = useMutation(api.leads.batchPushToCrm);
 
   const {
     results,
@@ -44,6 +47,10 @@ export default function LeadsPage() {
 
   const isLoading = queryStatus === "LoadingFirstPage";
   const canLoadMore = queryStatus === "CanLoadMore";
+
+  const handlePushToCrm = async (ids: string[]) => {
+    await batchPushToCrm({ ids: ids as Id<"leads">[] });
+  };
 
   return (
     <div className="space-y-6">
@@ -85,6 +92,7 @@ export default function LeadsPage() {
           company?: { name: string } | null;
         }>}
         isLoading={isLoading}
+        onPushToCrm={handlePushToCrm}
       />
 
       {canLoadMore && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   ColumnDef,
   flexRender,
@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Send } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
 
@@ -179,14 +179,15 @@ const columns: ColumnDef<Lead>[] = [
 export function LeadTable({
   leads,
   isLoading,
-  onSelectionChange,
+  onPushToCrm,
 }: {
   leads: Lead[];
   isLoading?: boolean;
-  onSelectionChange?: (selectedIds: string[]) => void;
+  onPushToCrm?: (ids: string[]) => Promise<void>;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isPushing, setIsPushing] = useState(false);
 
   const table = useReactTable({
     data: leads,
@@ -200,12 +201,27 @@ export function LeadTable({
     getRowId: (row) => row._id,
   });
 
-  useEffect(() => {
-    if (onSelectionChange) {
-      const selectedIds = Object.keys(rowSelection).filter((key) => rowSelection[key]);
-      onSelectionChange(selectedIds);
+  const selectedRows = table.getFilteredSelectedRowModel().rows;
+  const selectedCount = selectedRows.length;
+  const pushableRows = selectedRows.filter(
+    (row) =>
+      row.original.status !== "pushed_to_crm" &&
+      row.original.status !== "raw" &&
+      row.original.status !== "invalid"
+  );
+  const pushableCount = pushableRows.length;
+  const notEligibleCount = selectedCount - pushableCount;
+
+  const handlePush = async () => {
+    if (!onPushToCrm || pushableCount === 0) return;
+    setIsPushing(true);
+    try {
+      await onPushToCrm(pushableRows.map((row) => row.original._id));
+      setRowSelection({});
+    } finally {
+      setIsPushing(false);
     }
-  }, [rowSelection, onSelectionChange]);
+  };
 
   if (isLoading) {
     return (
@@ -218,47 +234,80 @@ export function LeadTable({
   }
 
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                data-state={row.getIsSelected() && "selected"}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
+    <div className="space-y-3">
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border bg-muted/50 px-4 py-3">
+          <span className="text-sm font-medium">
+            {selectedCount} selected
+          </span>
+          {pushableCount > 0 && onPushToCrm && (
+            <Button
+              size="sm"
+              onClick={handlePush}
+              disabled={isPushing}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              {isPushing
+                ? "Pushing..."
+                : `Push ${pushableCount} to NovaCRM`}
+            </Button>
+          )}
+          {notEligibleCount > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {notEligibleCount} already pushed or not eligible
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRowSelection({})}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
                 ))}
               </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center">
-                No leads found.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No leads found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
