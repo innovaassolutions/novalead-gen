@@ -32,10 +32,6 @@ export async function scrapePage(url: string): Promise<{ markdown: string; metad
         onlyMainContent: false,
         timeout: 30000,
       },
-      sessionOptions: {
-        useProxy: true,
-        solveCaptchas: true,
-      },
     });
 
     if (result.status === "completed" && result.data) {
@@ -68,10 +64,6 @@ export async function extractFromPage(
       urls: [url],
       prompt,
       schema,
-      sessionOptions: {
-        useProxy: true,
-        solveCaptchas: true,
-      },
     });
 
     if (result.status === "completed" && result.data) {
@@ -95,9 +87,10 @@ export async function searchGoogleAds(
   query: string,
   country?: string,
 ): Promise<{ advertisers: GoogleAdResult[] }> {
-  const googleDomain = country === "ca" ? "google.ca" : "google.com";
-  const gl = country === "ca" ? "&gl=ca" : country === "us" ? "&gl=us" : "";
-  const url = `https://www.${googleDomain}/search?q=${encodeURIComponent(query)}${gl}&num=20`;
+  // Use google.com with gl param (avoids consent issues on regional domains)
+  // Add hl=en for English results and pws=0 to disable personalization
+  const gl = country || "us";
+  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&gl=${gl}&hl=en&num=20&pws=0`;
 
   logger.info(`Hyperbrowser: scraping Google ads from ${url}`);
 
