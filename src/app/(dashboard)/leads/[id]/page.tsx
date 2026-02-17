@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
   Linkedin,
+  Megaphone,
   Zap,
   Send,
   ExternalLink,
@@ -190,6 +191,25 @@ export default function LeadDetailPage({
                   <div className="text-sm">
                     <span className="text-muted-foreground">Location:</span>{" "}
                     {lead.company.city}, {lead.company.state}
+                  </div>
+                )}
+                {lead.company.runningAds === true && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Megaphone className="h-4 w-4 text-orange-500" />
+                    <span>
+                      {lead.company.adCount ?? 0} Google ad{lead.company.adCount !== 1 ? "s" : ""}
+                      {lead.company.adPlatforms && lead.company.adPlatforms.length > 0 && (
+                        <span className="text-muted-foreground">
+                          {" "}({lead.company.adPlatforms.join(", ")})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {lead.company.runningAds === false && lead.company.enrichedAt && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Megaphone className="h-4 w-4" />
+                    <span>No Google ad activity</span>
                   </div>
                 )}
               </div>

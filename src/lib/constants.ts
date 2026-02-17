@@ -8,8 +8,7 @@ export const LEAD_SOURCES = [
 
 export const JOB_TYPES = [
   "scrape_google_maps", "enrich_lead", "enrich_company", "validate_email",
-  "scrape_google_ads", "scrape_linkedin_ads", "generate_analytics",
-  "push_to_crm", "push_to_instantly"
+  "generate_analytics", "push_to_crm", "push_to_instantly"
 ] as const;
 
 export const STATUS_COLORS: Record<string, string> = {

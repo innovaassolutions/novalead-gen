@@ -34,7 +34,7 @@ const CA_PROVINCE_NAMES: Record<string, string> = {
 };
 
 interface ScraperConfigFormProps {
-  scraperType: "google_maps" | "google_ads" | "linkedin_ads";
+  scraperType: "google_maps";
   onStarted?: (runId: string) => void;
 }
 
@@ -71,21 +71,10 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
         totalJobs: 1,
       });
 
-      const jobType = scraperType === "google_maps" ? "scrape_google_maps" :
-            scraperType === "google_ads" ? "scrape_google_ads" : "scrape_linkedin_ads";
-
-      // Google Ads and LinkedIn Ads expect 'queries' array, Google Maps uses 'query' string
-      const payload = scraperType === "google_maps"
-        ? { ...config, scraperRunId: runId }
-        : {
-            queries: config.query.split(",").map((q: string) => q.trim()).filter(Boolean),
-            country: config.country,
-            region: config.region,
-            scraperRunId: runId,
-          };
+      const payload = { ...config, scraperRunId: runId };
 
       await createJob({
-        type: jobType,
+        type: "scrape_google_maps" as const,
         priority: 7,
         payload,
         scraperRunId: runId,
@@ -99,13 +88,7 @@ export function ScraperConfigForm({ scraperType, onStarted }: ScraperConfigFormP
     }
   };
 
-  const labels = {
-    google_maps: { title: "Google Maps Scraper", queryLabel: "Business Type", queryPlaceholder: "e.g., dentist, plumber, law firm" },
-    google_ads: { title: "Google Ads Scraper", queryLabel: "Search Keywords (comma-separated)", queryPlaceholder: "e.g., dentist near me, dental implants, teeth whitening" },
-    linkedin_ads: { title: "LinkedIn Ads Scraper", queryLabel: "Industry/Keywords (comma-separated)", queryPlaceholder: "e.g., B2B SaaS, recruiting software" },
-  };
-
-  const label = labels[scraperType];
+  const label = { title: "Google Maps Scraper", queryLabel: "Business Type", queryPlaceholder: "e.g., dentist, plumber, law firm" };
 
   return (
     <Card>

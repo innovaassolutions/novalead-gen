@@ -3,6 +3,7 @@ import { askClaude } from "../ai/claude-client";
 import { logger } from "../utils/logger";
 import { extractJson } from "../utils/json";
 import { searchGoogle, fetchWebPage } from "../utils/web";
+import { checkAdActivity, type AdActivity } from "../utils/ad-transparency";
 
 /**
  * Combined enrichment: researches the company AND finds contacts in a single
@@ -18,7 +19,7 @@ export async function processCompanyEnrichment(client: ConvexClient, job: any): 
   let searchData = "";
   try {
     const searchResults = await searchGoogle(
-      `"${companyName}" ${domain || ""} owner OR team OR staff OR "about us"`,
+      `"${companyName}" ${domain || ""} owner OR team OR staff OR "about us" OR "contact" OR phone`,
     );
     if (searchResults.length > 0) {
       searchData = searchResults
@@ -30,23 +31,26 @@ export async function processCompanyEnrichment(client: ConvexClient, job: any): 
     logger.warn(`Google search failed for ${companyName}: ${e}`);
   }
 
-  // Step 2: Fetch the company website (try about/team pages first, then homepage)
-  let websiteContent = "";
+  // Step 2: Fetch the company website — gather content from multiple pages
+  // so we get both people (about/team) and phone numbers (contact page)
+  const pageSections: string[] = [];
   if (domain) {
-    const paths = ["/about", "/about-us", "/our-team", "/team", "/staff", "/"];
+    const paths = ["/about", "/about-us", "/our-team", "/team", "/staff", "/contact", "/contact-us", "/"];
     for (const path of paths) {
       try {
         const content = await fetchWebPage(`https://${domain}${path}`);
         if (content && content.length > 100) {
-          websiteContent = `Content from ${domain}${path}:\n${content.substring(0, 8000)}`;
+          pageSections.push(`Content from ${domain}${path}:\n${content.substring(0, 4000)}`);
           logger.info(`Fetched ${domain}${path} (${content.length} chars)`);
-          break;
+          // Keep going — collect up to 3 pages to maximize phone/contact data
+          if (pageSections.length >= 3) break;
         }
       } catch {
         // Try next path
       }
     }
   }
+  const websiteContent = pageSections.join("\n\n---\n\n");
 
   // Step 3: Single Claude call for both company research + contact extraction
   const contextParts: string[] = [];
@@ -96,7 +100,11 @@ CRITICAL RULES:
 - Do NOT fabricate or guess names that aren't in the data
 - Do NOT include LinkedIn URLs — we don't want guessed profiles
 - For email: only construct firstname@domain.com if the domain is provided AND the person's name is confirmed in the data
-- For phone: only include a phone number if it is explicitly listed in the data as a direct or personal number for that contact. Do NOT use the main company phone number — we already store that separately.
+- For phone: include a phone number for a contact if ANY of these apply:
+  (a) A direct/personal number is listed for that person in the data
+  (b) The business appears to be a small/solo operation (1-3 staff) and the company main phone is found — in that case, assign the company phone to the primary contact (owner/principal), since for small businesses the main number IS their direct line
+  (c) A "call us" or "call Dr./Mr./Mrs. X" number is found associated with a named person
+  Format phone numbers in E.164-like format when possible (e.g. +15551234567), otherwise keep the format found in the data.
 - If no people are found, set contacts to an empty array
 - Base everything on the PROVIDED DATA, not guesswork
 - Only return the JSON object, no other text`;
@@ -125,6 +133,19 @@ ${context}`;
   // Filter out contacts with no real name
   contacts = contacts.filter((c: any) => c.firstName && c.lastName);
 
+  // Step 4: Check Google Ads Transparency Center for ad activity
+  let adActivity: AdActivity = { runningAds: false, adCount: 0, adPlatforms: [] };
+  try {
+    adActivity = await checkAdActivity(companyName, domain);
+    if (adActivity.runningAds) {
+      logger.info(`${companyName}: running ${adActivity.adCount} ads on ${adActivity.adPlatforms.join(", ")}`);
+    } else {
+      logger.info(`${companyName}: no Google ad activity found`);
+    }
+  } catch (e) {
+    logger.warn(`Ad transparency check failed for ${companyName}: ${e}`);
+  }
+
   // Update company record
   if (companyData) {
     await client.updateCompany(companyId, {
@@ -135,12 +156,20 @@ ${context}`;
       keyProducts: Array.isArray(companyData.keyProducts) ? companyData.keyProducts : undefined,
       targetMarket: companyData.targetMarket || undefined,
       estimatedRevenue: companyData.estimatedRevenue || undefined,
+      runningAds: adActivity.runningAds,
+      adPlatforms: adActivity.adPlatforms.length > 0 ? adActivity.adPlatforms : undefined,
+      adCount: adActivity.adCount > 0 ? adActivity.adCount : undefined,
       enrichedAt: Date.now(),
     });
     logger.info(`Updated company record for ${companyName}`);
   } else {
     // Still mark as enriched even if no useful data — so we don't re-enrich
-    await client.updateCompany(companyId, { enrichedAt: Date.now() });
+    await client.updateCompany(companyId, {
+      runningAds: adActivity.runningAds,
+      adPlatforms: adActivity.adPlatforms.length > 0 ? adActivity.adPlatforms : undefined,
+      adCount: adActivity.adCount > 0 ? adActivity.adCount : undefined,
+      enrichedAt: Date.now(),
+    });
   }
 
   // Create leads from found contacts
@@ -163,15 +192,18 @@ ${context}`;
 
   // Store enrichment record
   const confidenceScore = companyData?.confidence || 0;
+  const adSummary = adActivity.runningAds
+    ? `Running ${adActivity.adCount} Google ad${adActivity.adCount !== 1 ? "s" : ""} on ${adActivity.adPlatforms.join(", ")}.`
+    : "No Google ad activity.";
   await client.createEnrichment({
     companyId,
     provider: "claude",
     promptType: "research_company",
-    result: { company: companyData, contacts },
+    result: { company: companyData, contacts, adActivity },
     confidenceScore,
     reasoning: companyData
-      ? `Researched ${companyName}: ${companyData.industry || "unknown industry"}, found ${contacts.length} contacts. ${hasData ? "Based on web search + website data." : "Limited data available."}`
-      : `Could not research ${companyName}. ${hasData ? "Web data found but extraction failed." : "No web data available."}`,
+      ? `Researched ${companyName}: ${companyData.industry || "unknown industry"}, found ${contacts.length} contacts. ${adSummary} ${hasData ? "Based on web search + website data." : "Limited data available."}`
+      : `Could not research ${companyName}. ${adSummary} ${hasData ? "Web data found but extraction failed." : "No web data available."}`,
     contactsFound: contacts.length,
     inputTokens: response.inputTokens,
     outputTokens: response.outputTokens,
@@ -185,5 +217,6 @@ ${context}`;
     industry: companyData?.industry,
     confidence: confidenceScore,
     cost: response.costUsd,
+    adActivity,
   };
 }

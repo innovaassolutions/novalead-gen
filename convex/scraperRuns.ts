@@ -3,11 +3,7 @@ import { v } from "convex/values";
 
 export const create = mutation({
   args: {
-    type: v.union(
-      v.literal("google_maps"),
-      v.literal("google_ads"),
-      v.literal("linkedin_ads")
-    ),
+    type: v.literal("google_maps"),
     name: v.string(),
     config: v.any(),
     totalJobs: v.number(),

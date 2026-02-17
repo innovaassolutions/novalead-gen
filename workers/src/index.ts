@@ -6,8 +6,6 @@ import { processEmailValidation } from "./processors/email-validation";
 import { processPushToCrm } from "./processors/push-to-crm";
 import { processPushToInstantly } from "./processors/push-to-instantly";
 import { processGenerateAnalytics } from "./processors/generate-analytics";
-import { processGoogleAds } from "./processors/google-ads";
-import { processLinkedInAds } from "./processors/linkedin-ads";
 import { logger } from "./utils/logger";
 
 const POLL_INTERVAL_MS = 2000;
@@ -18,8 +16,6 @@ const JOB_TYPES = [
   "enrich_lead",
   "enrich_company",
   "validate_email",
-  "scrape_google_ads",
-  "scrape_linkedin_ads",
   "generate_analytics",
   "push_to_crm",
   "push_to_instantly",
@@ -33,8 +29,6 @@ const processors: Record<string, (client: ConvexClient, job: any) => Promise<any
   push_to_crm: processPushToCrm,
   push_to_instantly: processPushToInstantly,
   generate_analytics: processGenerateAnalytics,
-  scrape_google_ads: processGoogleAds,
-  scrape_linkedin_ads: processLinkedInAds,
 };
 
 async function main() {

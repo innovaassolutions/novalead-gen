@@ -117,8 +117,6 @@ export default defineSchema({
       v.literal("enrich_lead"),
       v.literal("enrich_company"),
       v.literal("validate_email"),
-      v.literal("scrape_google_ads"),
-      v.literal("scrape_linkedin_ads"),
       v.literal("generate_analytics"),
       v.literal("push_to_crm"),
       v.literal("push_to_instantly")
@@ -149,11 +147,7 @@ export default defineSchema({
     .index("by_worker", ["workerId"]),
 
   scraperRuns: defineTable({
-    type: v.union(
-      v.literal("google_maps"),
-      v.literal("google_ads"),
-      v.literal("linkedin_ads")
-    ),
+    type: v.literal("google_maps"),
     status: v.union(
       v.literal("pending"),
       v.literal("running"),

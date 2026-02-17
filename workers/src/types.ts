@@ -10,8 +10,6 @@ export type JobType =
   | "enrich_lead"
   | "enrich_company"
   | "validate_email"
-  | "scrape_google_ads"
-  | "scrape_linkedin_ads"
   | "generate_analytics"
   | "push_to_crm"
   | "push_to_instantly";
@@ -20,7 +18,7 @@ export type JobType =
 export type JobStatus = "pending" | "claimed" | "processing" | "completed" | "failed" | "cancelled";
 
 // Scraper types
-export type ScraperType = "google_maps" | "google_ads" | "linkedin_ads";
+export type ScraperType = "google_maps";
 
 // Campaign statuses
 export type CampaignStatus = "draft" | "loading" | "active" | "paused" | "completed";

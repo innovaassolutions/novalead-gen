@@ -6,8 +6,6 @@ const jobTypeValidator = v.union(
   v.literal("enrich_lead"),
   v.literal("enrich_company"),
   v.literal("validate_email"),
-  v.literal("scrape_google_ads"),
-  v.literal("scrape_linkedin_ads"),
   v.literal("generate_analytics"),
   v.literal("push_to_crm"),
   v.literal("push_to_instantly")
@@ -201,8 +199,6 @@ export const getStats = query({
       "enrich_lead",
       "enrich_company",
       "validate_email",
-      "scrape_google_ads",
-      "scrape_linkedin_ads",
       "generate_analytics",
       "push_to_crm",
       "push_to_instantly",

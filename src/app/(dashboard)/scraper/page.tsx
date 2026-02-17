@@ -5,7 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScraperProgress } from "@/components/scraper/scraper-progress";
-import { MapPin, Megaphone, Linkedin, Search } from "lucide-react";
+import { MapPin, Search } from "lucide-react";
 
 const scraperTypes = [
   {
@@ -13,18 +13,6 @@ const scraperTypes = [
     description: "Scrape businesses by location and category from Google Maps",
     href: "/scraper/google-maps",
     icon: MapPin,
-  },
-  {
-    title: "Google Ads Scraper",
-    description: "Discover advertisers via the Google Ads Transparency Center",
-    href: "/scraper/google-ads",
-    icon: Megaphone,
-  },
-  {
-    title: "LinkedIn Ads Scraper",
-    description: "Find companies running LinkedIn ad campaigns",
-    href: "/scraper/linkedin-ads",
-    icon: Linkedin,
   },
 ];
 
