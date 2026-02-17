@@ -2,8 +2,13 @@ import { ConvexClient } from "../convex-client";
 import { logger } from "../utils/logger";
 import { withRetry } from "../utils/retry";
 import { RateLimiter } from "../utils/rate-limiter";
+import {
+  isHyperbrowserAvailable,
+  searchGoogleAds as hbSearchGoogleAds,
+  type GoogleAdResult,
+} from "../utils/hyperbrowser";
 
-// Rate limit for SerpAPI
+// Rate limit for SerpAPI fallback
 const rateLimiter = new RateLimiter(30, 60_000);
 
 const SERPAPI_BASE = "https://serpapi.com/search.json";
@@ -15,7 +20,7 @@ interface AdResult {
   adText: string;
 }
 
-// Full state/province names for SerpAPI location parameter
+// Full state/province names for location building
 const US_STATE_NAMES: Record<string, string> = {
   AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
   CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
@@ -36,12 +41,55 @@ const CA_PROVINCE_NAMES: Record<string, string> = {
   SK: "Saskatchewan", YT: "Yukon",
 };
 
-/**
- * Search Google for a keyword and extract businesses running paid ads.
- * SerpAPI returns paid ads in the `ads` section of Google search results.
- * Also extracts sponsored local results and organic results with ad indicators.
- */
-async function searchGoogleForAds(
+function extractDomainFromUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function buildQueryLocation(country?: string, region?: string): string {
+  if (region) {
+    const regionNames = country === "ca" ? CA_PROVINCE_NAMES : US_STATE_NAMES;
+    return regionNames[region] || region;
+  }
+  if (country === "ca") return "Canada";
+  if (country === "us") return "United States";
+  return "";
+}
+
+// ─── Hyperbrowser approach (primary) ─────────────────────────────────────
+
+async function searchAdsWithHyperbrowser(
+  query: string,
+  country?: string,
+): Promise<AdResult[]> {
+  const data = await hbSearchGoogleAds(query, country);
+
+  return data.advertisers.map((ad: GoogleAdResult) => ({
+    advertiserName: ad.businessName,
+    domain: ad.domain || (ad.landingPageUrl ? extractDomainFromUrl(ad.landingPageUrl) : undefined),
+    landingPage: ad.landingPageUrl,
+    adText: ad.adText || "",
+  }));
+}
+
+// ─── SerpAPI approach (fallback) ─────────────────────────────────────────
+
+function buildSerpApiLocation(country?: string, region?: string): string | undefined {
+  if (!country && !region) return undefined;
+  const countryName = country === "ca" ? "Canada" : "United States";
+  if (region) {
+    const regionNames = country === "ca" ? CA_PROVINCE_NAMES : US_STATE_NAMES;
+    const fullRegionName = regionNames[region] || region;
+    return `${fullRegionName},${countryName}`;
+  }
+  return countryName;
+}
+
+async function searchAdsWithSerpApi(
   query: string,
   apiKey: string,
   location?: string,
@@ -54,18 +102,15 @@ async function searchGoogleForAds(
     num: "20",
   });
 
-  if (location) {
-    params.set("location", location);
-  }
+  if (location) params.set("location", location);
   if (glCountry) {
     params.set("gl", glCountry);
     params.set("hl", "en");
   }
 
-  const url = `${SERPAPI_BASE}?${params.toString()}`;
   logger.info(`SerpAPI request: q="${query}", location="${location || "none"}", gl="${glCountry || "none"}"`);
 
-  const response = await fetch(url);
+  const response = await fetch(`${SERPAPI_BASE}?${params.toString()}`);
 
   if (!response.ok) {
     const text = await response.text();
@@ -75,12 +120,10 @@ async function searchGoogleForAds(
   const data = await response.json();
   const results: AdResult[] = [];
 
-  // 1. Extract from paid ads (top and bottom)
   for (const ad of (data.ads || [])) {
     const domain = ad.displayed_link
       ? ad.displayed_link.replace(/https?:\/\//, "").split("/")[0].replace(/^www\./, "")
       : ad.link ? extractDomainFromUrl(ad.link) : undefined;
-
     results.push({
       advertiserName: ad.title || "Unknown",
       domain,
@@ -89,7 +132,6 @@ async function searchGoogleForAds(
     });
   }
 
-  // 2. Extract from shopping results (sponsored product ads)
   for (const ad of (data.shopping_results || [])) {
     const domain = ad.link ? extractDomainFromUrl(ad.link) : undefined;
     results.push({
@@ -100,7 +142,6 @@ async function searchGoogleForAds(
     });
   }
 
-  // 3. Extract from local ads (sponsored map results)
   for (const ad of (data.local_ads || [])) {
     results.push({
       advertiserName: ad.title || "Unknown",
@@ -110,22 +151,19 @@ async function searchGoogleForAds(
     });
   }
 
-  // 4. Extract sponsored entries from local_results (map pack)
   for (const result of (data.local_results || [])) {
     if (result.sponsored) {
       results.push({
         advertiserName: result.title || "Unknown",
-        domain: result.website ? extractDomainFromUrl(result.website) : result.link ? extractDomainFromUrl(result.link) : undefined,
+        domain: result.website ? extractDomainFromUrl(result.website) : undefined,
         landingPage: result.website || result.link || undefined,
         adText: result.description || result.type || "",
       });
     }
   }
 
-  // 5. If we still have no ads, also extract from organic results — these aren't ads
-  //    but they represent active businesses in the space. Only use as fallback.
   if (results.length === 0 && data.organic_results) {
-    logger.info(`No paid ads found for "${query}", extracting from organic results as fallback`);
+    logger.info(`No paid ads found via SerpAPI for "${query}", using organic results as fallback`);
     for (const result of data.organic_results.slice(0, 10)) {
       const domain = result.link ? extractDomainFromUrl(result.link) : undefined;
       if (domain) {
@@ -139,75 +177,37 @@ async function searchGoogleForAds(
     }
   }
 
-  logger.info(`SerpAPI response sections: ads=${(data.ads || []).length}, shopping=${(data.shopping_results || []).length}, local_ads=${(data.local_ads || []).length}, local_results=${(data.local_results || []).length}, organic=${(data.organic_results || []).length}`);
+  logger.info(`SerpAPI response: ads=${(data.ads || []).length}, shopping=${(data.shopping_results || []).length}, local_ads=${(data.local_ads || []).length}, local_results=${(data.local_results || []).length}, organic=${(data.organic_results || []).length}`);
 
   return results;
 }
 
-function extractDomainFromUrl(url: string): string | undefined {
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./, "");
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Build a SerpAPI-compatible location string from country + region code.
- * SerpAPI expects full names like "Alberta,Canada" or "California,United States".
- */
-function buildLocation(country?: string, region?: string): string | undefined {
-  if (!country && !region) return undefined;
-  const countryName = country === "ca" ? "Canada" : "United States";
-
-  if (region) {
-    const regionNames = country === "ca" ? CA_PROVINCE_NAMES : US_STATE_NAMES;
-    const fullRegionName = regionNames[region] || region;
-    return `${fullRegionName},${countryName}`;
-  }
-  return countryName;
-}
-
-/**
- * Build a location string to append to the query for better local results.
- */
-function buildQueryLocation(country?: string, region?: string): string {
-  if (region) {
-    const regionNames = country === "ca" ? CA_PROVINCE_NAMES : US_STATE_NAMES;
-    return regionNames[region] || region;
-  }
-  if (country === "ca") return "Canada";
-  if (country === "us") return "United States";
-  return "";
-}
+// ─── Main processor ──────────────────────────────────────────────────────
 
 export async function processGoogleAds(client: ConvexClient, job: any): Promise<any> {
   const { queries, country, region, scraperRunId } = job.payload;
-
-  const apiKey = process.env.SERPAPI_KEY;
-  if (!apiKey) {
-    throw new Error("SERPAPI_KEY environment variable not set");
-  }
 
   if (!queries || !Array.isArray(queries) || queries.length === 0) {
     throw new Error("queries array is required in job payload");
   }
 
-  const location = buildLocation(country, region);
+  const useHyperbrowser = isHyperbrowserAvailable();
+  const serpApiKey = process.env.SERPAPI_KEY;
+
+  if (!useHyperbrowser && !serpApiKey) {
+    throw new Error("Either HYPERBROWSER_API_KEY or SERPAPI_KEY must be set");
+  }
+
   const queryLocation = buildQueryLocation(country, region);
+  const serpLocation = buildSerpApiLocation(country, region);
   const glCountry = country === "ca" ? "ca" : country === "us" ? "us" : undefined;
 
   logger.info(
-    `Starting Google Ads scrape: ${queries.length} queries, location: ${location || "all"}, gl: ${glCountry || "none"}`
+    `Starting Google Ads scrape: ${queries.length} queries, location: ${queryLocation || "all"}, engine: ${useHyperbrowser ? "hyperbrowser" : "serpapi"}`
   );
 
-  // Mark run as running
   if (scraperRunId) {
-    await client.updateScraperProgress({
-      scraperRunId,
-      status: "running",
-    });
+    await client.updateScraperProgress({ scraperRunId, status: "running" });
   }
 
   let totalAds = 0;
@@ -217,7 +217,6 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
 
   for (let i = 0; i < queries.length; i++) {
     const query = queries[i];
-    // Append location to query for better local results (e.g., "dentist Alberta")
     const fullQuery = queryLocation ? `${query} ${queryLocation}` : query;
 
     try {
@@ -227,32 +226,41 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
         companiesFound: totalCompanies,
       });
 
-      await rateLimiter.wait();
+      let ads: AdResult[];
 
-      const ads = await withRetry(
-        () => searchGoogleForAds(fullQuery, apiKey, location, glCountry),
-        { maxRetries: 2, delayMs: 3000, backoff: 2 },
-      );
+      if (useHyperbrowser) {
+        ads = await withRetry(
+          () => searchAdsWithHyperbrowser(fullQuery, country),
+          { maxRetries: 2, delayMs: 5000, backoff: 2 },
+        );
+      } else {
+        await rateLimiter.wait();
+        ads = await withRetry(
+          () => searchAdsWithSerpApi(fullQuery, serpApiKey!, serpLocation, glCountry),
+          { maxRetries: 2, delayMs: 3000, backoff: 2 },
+        );
+      }
 
       logger.info(`Found ${ads.length} ads for "${query}"`);
       totalAds += ads.length;
 
-      // Extract unique companies from ad results
       const companiesToCreate: any[] = [];
 
       for (const ad of ads) {
-        if (ad.domain && !uniqueDomains.has(ad.domain)) {
-          uniqueDomains.add(ad.domain);
+        const domain = ad.domain;
+        const dedupeKey = domain || ad.advertiserName.toLowerCase().trim();
+        if (!uniqueDomains.has(dedupeKey)) {
+          uniqueDomains.add(dedupeKey);
 
           companiesToCreate.push({
             name: ad.advertiserName,
-            website: ad.landingPage || `https://${ad.domain}`,
-            domain: ad.domain,
+            website: ad.landingPage || (domain ? `https://${domain}` : undefined),
+            domain,
             source: "ad_library" as const,
             metadata: {
-              adText: ad.adText.substring(0, 500),
+              adText: (ad.adText || "").substring(0, 500),
               searchQuery: query,
-              location,
+              location: queryLocation || undefined,
             },
           });
         }
@@ -263,20 +271,14 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
         const createdIds: string[] = batchResult?.ids || [];
         totalCompanies += createdIds.length;
 
-        // Create one combined enrichment job per company
         for (let j = 0; j < companiesToCreate.length; j++) {
           const companyId = createdIds[j];
           if (!companyId) continue;
-
           const company = companiesToCreate[j];
           try {
             await client.createJob({
               type: "enrich_company",
-              payload: {
-                companyName: company.name,
-                domain: company.domain,
-                companyId,
-              },
+              payload: { companyName: company.name, domain: company.domain, companyId },
               priority: 5,
             });
           } catch (error) {
@@ -291,7 +293,6 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
     }
   }
 
-  // Final progress update
   await client.updateScraperProgress({
     scraperRunId,
     completedJobs: queries.length,
@@ -304,12 +305,13 @@ export async function processGoogleAds(client: ConvexClient, job: any): Promise<
     totalAds,
     uniqueCompanies: totalCompanies,
     uniqueDomains: uniqueDomains.size,
-    location: location || "all",
+    location: queryLocation || "all",
+    engine: useHyperbrowser ? "hyperbrowser" : "serpapi",
     errors: errors.length > 0 ? errors : undefined,
   };
 
   logger.info(
-    `Google Ads scrape complete: ${totalAds} ads, ${totalCompanies} unique companies`
+    `Google Ads scrape complete: ${totalAds} ads, ${totalCompanies} unique companies (${result.engine})`
   );
 
   return result;

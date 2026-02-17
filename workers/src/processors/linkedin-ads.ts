@@ -2,17 +2,16 @@ import { ConvexClient } from "../convex-client";
 import { logger } from "../utils/logger";
 import { withRetry } from "../utils/retry";
 import { RateLimiter } from "../utils/rate-limiter";
+import {
+  isHyperbrowserAvailable,
+  searchLinkedInAds as hbSearchLinkedInAds,
+  type LinkedInAdResult,
+} from "../utils/hyperbrowser";
 
-// Rate limit for SerpAPI
+// Rate limit for SerpAPI fallback
 const rateLimiter = new RateLimiter(20, 60_000);
 
-interface LinkedInAdResult {
-  advertiserName: string;
-  advertiserLinkedIn?: string;
-  adContent: string;
-}
-
-// Full state/province names for SerpAPI location parameter
+// Full state/province names for SerpAPI location
 const US_STATE_NAMES: Record<string, string> = {
   AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
   CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
@@ -33,17 +32,43 @@ const CA_PROVINCE_NAMES: Record<string, string> = {
   SK: "Saskatchewan", YT: "Yukon",
 };
 
-/**
- * Search for LinkedIn advertisers by querying Google for LinkedIn Ad Library results.
- * SerpAPI doesn't have a dedicated LinkedIn Ads engine, so we search Google
- * targeting the LinkedIn Ad Library pages.
- */
-async function searchLinkedInAds(
+interface AdResult {
+  advertiserName: string;
+  advertiserLinkedIn?: string;
+  adContent: string;
+}
+
+// ─── Hyperbrowser approach (primary) ─────────────────────────────────────
+
+async function searchWithHyperbrowser(query: string): Promise<AdResult[]> {
+  const data = await hbSearchLinkedInAds(query);
+
+  return data.advertisers.map((ad: LinkedInAdResult) => ({
+    advertiserName: ad.companyName,
+    advertiserLinkedIn: ad.linkedinUrl,
+    adContent: ad.adContent || "",
+  }));
+}
+
+// ─── SerpAPI approach (fallback) ─────────────────────────────────────────
+
+function buildSerpApiLocation(country?: string, region?: string): string | undefined {
+  if (!country && !region) return undefined;
+  const countryName = country === "ca" ? "Canada" : "United States";
+  if (region) {
+    const regionNames = country === "ca" ? CA_PROVINCE_NAMES : US_STATE_NAMES;
+    const fullRegionName = regionNames[region] || region;
+    return `${fullRegionName},${countryName}`;
+  }
+  return countryName;
+}
+
+async function searchWithSerpApi(
   query: string,
   apiKey: string,
   location?: string,
   glCountry?: string,
-): Promise<LinkedInAdResult[]> {
+): Promise<AdResult[]> {
   const params = new URLSearchParams({
     engine: "google",
     q: `site:linkedin.com/ad-library "${query}"`,
@@ -51,9 +76,7 @@ async function searchLinkedInAds(
     num: "20",
   });
 
-  if (location) {
-    params.set("location", location);
-  }
+  if (location) params.set("location", location);
   if (glCountry) {
     params.set("gl", glCountry);
     params.set("hl", "en");
@@ -69,7 +92,7 @@ async function searchLinkedInAds(
   }
 
   const data = await response.json();
-  const results: LinkedInAdResult[] = [];
+  const results: AdResult[] = [];
 
   logger.info(`SerpAPI LinkedIn response: organic_results=${(data.organic_results || []).length}`);
 
@@ -77,7 +100,6 @@ async function searchLinkedInAds(
     for (const result of data.organic_results) {
       const advertiserMatch = result.title?.match(/^(.+?)(?:\s+[-|]\s+|$)/);
       const advertiserName = advertiserMatch?.[1] || result.title || query;
-
       results.push({
         advertiserName: advertiserName.trim(),
         advertiserLinkedIn: result.link || undefined,
@@ -89,45 +111,31 @@ async function searchLinkedInAds(
   return results;
 }
 
-/**
- * Build a SerpAPI-compatible location string from country + region code.
- * SerpAPI expects full names like "Alberta,Canada" or "California,United States".
- */
-function buildLocation(country?: string, region?: string): string | undefined {
-  if (!country && !region) return undefined;
-  const countryName = country === "ca" ? "Canada" : "United States";
-  if (region) {
-    const regionNames = country === "ca" ? CA_PROVINCE_NAMES : US_STATE_NAMES;
-    const fullRegionName = regionNames[region] || region;
-    return `${fullRegionName},${countryName}`;
-  }
-  return countryName;
-}
+// ─── Main processor ──────────────────────────────────────────────────────
 
 export async function processLinkedInAds(client: ConvexClient, job: any): Promise<any> {
   const { queries, country, region, scraperRunId } = job.payload;
-
-  const apiKey = process.env.SERPAPI_KEY;
-  if (!apiKey) {
-    throw new Error("SERPAPI_KEY environment variable not set");
-  }
 
   if (!queries || !Array.isArray(queries) || queries.length === 0) {
     throw new Error("queries array is required in job payload");
   }
 
-  const location = buildLocation(country, region);
+  const useHyperbrowser = isHyperbrowserAvailable();
+  const serpApiKey = process.env.SERPAPI_KEY;
+
+  if (!useHyperbrowser && !serpApiKey) {
+    throw new Error("Either HYPERBROWSER_API_KEY or SERPAPI_KEY must be set");
+  }
+
+  const serpLocation = buildSerpApiLocation(country, region);
   const glCountry = country === "ca" ? "ca" : country === "us" ? "us" : undefined;
 
   logger.info(
-    `Starting LinkedIn Ads scrape: ${queries.length} queries, location: ${location || "all"}, gl: ${glCountry || "none"}`
+    `Starting LinkedIn Ads scrape: ${queries.length} queries, engine: ${useHyperbrowser ? "hyperbrowser" : "serpapi"}`
   );
 
   if (scraperRunId) {
-    await client.updateScraperProgress({
-      scraperRunId,
-      status: "running",
-    });
+    await client.updateScraperProgress({ scraperRunId, status: "running" });
   }
 
   let totalAds = 0;
@@ -145,12 +153,20 @@ export async function processLinkedInAds(client: ConvexClient, job: any): Promis
         companiesFound: totalCompanies,
       });
 
-      await rateLimiter.wait();
+      let ads: AdResult[];
 
-      const ads = await withRetry(
-        () => searchLinkedInAds(query, apiKey, location, glCountry),
-        { maxRetries: 2, delayMs: 5000, backoff: 2 },
-      );
+      if (useHyperbrowser) {
+        ads = await withRetry(
+          () => searchWithHyperbrowser(query),
+          { maxRetries: 2, delayMs: 5000, backoff: 2 },
+        );
+      } else {
+        await rateLimiter.wait();
+        ads = await withRetry(
+          () => searchWithSerpApi(query, serpApiKey!, serpLocation, glCountry),
+          { maxRetries: 2, delayMs: 5000, backoff: 2 },
+        );
+      }
 
       logger.info(`Found ${ads.length} LinkedIn ad results for "${query}"`);
       totalAds += ads.length;
@@ -168,9 +184,8 @@ export async function processLinkedInAds(client: ConvexClient, job: any): Promis
             metadata: {
               platform: "linkedin",
               linkedinAdLibraryUrl: ad.advertiserLinkedIn,
-              adContent: ad.adContent.substring(0, 500),
+              adContent: (ad.adContent || "").substring(0, 500),
               searchQuery: query,
-              location,
             },
           });
         }
@@ -181,19 +196,14 @@ export async function processLinkedInAds(client: ConvexClient, job: any): Promis
         const createdIds: string[] = batchResult?.ids || [];
         totalCompanies += createdIds.length;
 
-        // Create one combined enrichment job per company
         for (let j = 0; j < companiesToCreate.length; j++) {
           const companyId = createdIds[j];
           if (!companyId) continue;
-
           const company = companiesToCreate[j];
           try {
             await client.createJob({
               type: "enrich_company",
-              payload: {
-                companyName: company.name,
-                companyId,
-              },
+              payload: { companyName: company.name, companyId },
               priority: 5,
             });
           } catch (error) {
@@ -219,12 +229,12 @@ export async function processLinkedInAds(client: ConvexClient, job: any): Promis
     queriesSearched: queries.length,
     totalAds,
     uniqueCompanies: totalCompanies,
-    location: location || "all",
+    engine: useHyperbrowser ? "hyperbrowser" : "serpapi",
     errors: errors.length > 0 ? errors : undefined,
   };
 
   logger.info(
-    `LinkedIn Ads scrape complete: ${totalAds} ads, ${totalCompanies} unique companies`
+    `LinkedIn Ads scrape complete: ${totalAds} ads, ${totalCompanies} unique companies (${result.engine})`
   );
 
   return result;
