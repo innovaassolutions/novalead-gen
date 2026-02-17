@@ -319,6 +319,86 @@ export const update = mutation({
   },
 });
 
+export const getByIds = query({
+  args: { ids: v.array(v.id("leads")) },
+  handler: async (ctx, args) => {
+    const results = [];
+    for (const id of args.ids) {
+      const lead = await ctx.db.get(id);
+      if (!lead) continue;
+      let company = null;
+      if (lead.companyId) {
+        company = await ctx.db.get(lead.companyId);
+      }
+      results.push({ ...lead, company });
+    }
+    return results;
+  },
+});
+
+export const batchPushToCrm = mutation({
+  args: { ids: v.array(v.id("leads")) },
+  handler: async (ctx, args) => {
+    const leads: Array<{
+      leadId: string;
+      email: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+      title?: string;
+      companyName?: string;
+      industry?: string;
+      source: string;
+    }> = [];
+
+    for (const id of args.ids) {
+      const lead = await ctx.db.get(id);
+      if (!lead) continue;
+      // Skip leads already pushed
+      if (lead.status === "pushed_to_crm") continue;
+
+      let company = null;
+      if (lead.companyId) {
+        company = await ctx.db.get(lead.companyId);
+      }
+
+      leads.push({
+        leadId: id,
+        email: lead.email,
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        phone: lead.phone,
+        title: lead.title,
+        companyName: company?.name,
+        industry: company?.industry,
+        source: lead.source,
+      });
+
+      // Optimistically mark as pushed
+      await ctx.db.patch(id, {
+        status: "pushed_to_crm",
+        updatedAt: Date.now(),
+      });
+    }
+
+    if (leads.length === 0) return null;
+
+    // Create a single batch job
+    const now = Date.now();
+    const jobId = await ctx.db.insert("jobs", {
+      type: "push_to_crm",
+      status: "pending",
+      priority: 8,
+      payload: { leads },
+      attempts: 0,
+      maxAttempts: 3,
+      createdAt: now,
+    });
+
+    return { jobId, leadCount: leads.length };
+  },
+});
+
 export const getByCompany = query({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {
