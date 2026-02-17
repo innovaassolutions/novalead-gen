@@ -88,11 +88,16 @@ export async function fetchWebPage(url: string): Promise<string | null> {
  * Strip HTML tags and clean up whitespace to get readable text.
  */
 function stripHtml(html: string): string {
-  // Remove script and style blocks
+  // Remove script and style blocks (keep footer — it often contains phone numbers)
   let text = html.replace(/<script[\s\S]*?<\/script>/gi, "");
   text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
   text = text.replace(/<nav[\s\S]*?<\/nav>/gi, "");
-  text = text.replace(/<footer[\s\S]*?<\/footer>/gi, "");
+
+  // Extract tel: links before stripping tags (common source of phone numbers)
+  const telLinks = html.match(/href=["']tel:([^"']+)["']/gi) || [];
+  const phoneNumbers = telLinks.map((t) =>
+    t.replace(/href=["']tel:/i, "").replace(/["']$/, ""),
+  );
 
   // Remove HTML tags
   text = text.replace(/<[^>]+>/g, " ");
@@ -107,6 +112,12 @@ function stripHtml(html: string): string {
 
   // Clean up whitespace
   text = text.replace(/\s+/g, " ").trim();
+
+  // Append extracted tel: phone numbers so Claude can see them clearly
+  if (phoneNumbers.length > 0) {
+    const unique = [...new Set(phoneNumbers)];
+    text += `\n\nPhone numbers found on page: ${unique.join(", ")}`;
+  }
 
   return text;
 }
