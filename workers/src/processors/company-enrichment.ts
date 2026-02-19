@@ -11,7 +11,7 @@ import { checkAdActivity, type AdActivity } from "../utils/ad-transparency";
  * enrich_company + enrich_lead flow, cutting costs by ~75%.
  */
 export async function processCompanyEnrichment(client: ConvexClient, job: any): Promise<any> {
-  const { companyName, domain, companyId } = job.payload;
+  const { companyName, domain, companyId, companyPhone } = job.payload;
 
   logger.info(`Enriching company + contacts: ${companyName} (${domain || "no domain"})`);
 
@@ -100,10 +100,11 @@ CRITICAL RULES:
 - Do NOT fabricate or guess names that aren't in the data
 - Do NOT include LinkedIn URLs — we don't want guessed profiles
 - For email: only construct firstname@domain.com if the domain is provided AND the person's name is confirmed in the data
-- For phone: include a phone number for a contact if ANY of these apply:
-  (a) A direct/personal number is listed for that person in the data
-  (b) The business appears to be a small/solo operation (1-3 staff) and the company main phone is found — in that case, assign the company phone to the primary contact (owner/principal), since for small businesses the main number IS their direct line
-  (c) A "call us" or "call Dr./Mr./Mrs. X" number is found associated with a named person
+- For phone: only include a PERSONAL/DIRECT phone number for a contact — NOT the company main line.
+  Include a phone number if ANY of these apply:
+  (a) A direct/personal/mobile number is explicitly listed for that person in the data
+  (b) A "call Dr./Mr./Mrs. X" number is found specifically associated with a named person
+  Do NOT assign the company's main phone number as a person's phone — company phone is handled separately via a different field.
   Format phone numbers in E.164-like format when possible (e.g. +15551234567), otherwise keep the format found in the data.
 - If no people are found, set contacts to an empty array
 - Base everything on the PROVIDED DATA, not guesswork
@@ -180,6 +181,7 @@ ${context}`;
       lastName: c.lastName,
       title: c.title,
       phone: c.phone || undefined,
+      companyPhone: companyPhone || undefined,
       source: "ai_enrichment" as const,
       status: "enriched" as const,
       companyId,

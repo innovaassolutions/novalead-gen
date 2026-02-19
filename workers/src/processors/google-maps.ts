@@ -194,6 +194,7 @@ export async function processGoogleMaps(client: ConvexClient, job: any): Promise
               companyName: companyData.name,
               domain: companyData.domain,
               companyId,
+              companyPhone: companyData.phone,
             },
             priority: 5,
           });

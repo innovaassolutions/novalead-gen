@@ -9,6 +9,7 @@ export const create = mutation({
     lastName: v.optional(v.string()),
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
+    companyPhone: v.optional(v.string()),
     linkedinUrl: v.optional(v.string()),
     personalEmail: v.optional(v.string()),
     source: v.union(
@@ -51,6 +52,7 @@ export const create = mutation({
       lastName: args.lastName,
       title: args.title,
       phone: args.phone,
+      companyPhone: args.companyPhone,
       linkedinUrl: args.linkedinUrl,
       personalEmail: args.personalEmail,
       source: args.source,
@@ -75,6 +77,7 @@ export const batchCreate = mutation({
         lastName: v.optional(v.string()),
         title: v.optional(v.string()),
         phone: v.optional(v.string()),
+        companyPhone: v.optional(v.string()),
         linkedinUrl: v.optional(v.string()),
         personalEmail: v.optional(v.string()),
         source: v.union(
@@ -126,6 +129,7 @@ export const batchCreate = mutation({
         lastName: lead.lastName,
         title: lead.title,
         phone: lead.phone,
+        companyPhone: lead.companyPhone,
         linkedinUrl: lead.linkedinUrl,
         personalEmail: lead.personalEmail,
         source: lead.source,
@@ -293,6 +297,7 @@ export const update = mutation({
     lastName: v.optional(v.string()),
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
+    companyPhone: v.optional(v.string()),
     linkedinUrl: v.optional(v.string()),
     personalEmail: v.optional(v.string()),
     validationScore: v.optional(v.number()),
@@ -345,6 +350,7 @@ export const batchPushToCrm = mutation({
       firstName?: string;
       lastName?: string;
       phone?: string;
+      companyPhone?: string;
       title?: string;
       companyName?: string;
       industry?: string;
@@ -368,6 +374,7 @@ export const batchPushToCrm = mutation({
         firstName: lead.firstName,
         lastName: lead.lastName,
         phone: lead.phone,
+        companyPhone: lead.companyPhone || company?.phone,
         title: lead.title,
         companyName: company?.name,
         industry: company?.industry,
@@ -406,6 +413,31 @@ export const getByCompany = query({
       .query("leads")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .collect();
+  },
+});
+
+// One-time backfill: copy company phone to leads that have a companyId but no companyPhone
+// Run from Convex dashboard, then remove
+export const backfillCompanyPhone = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const allLeads = await ctx.db.query("leads").collect();
+    let updated = 0;
+
+    for (const lead of allLeads) {
+      if (lead.companyId && !lead.companyPhone) {
+        const company = await ctx.db.get(lead.companyId);
+        if (company?.phone) {
+          await ctx.db.patch(lead._id, {
+            companyPhone: company.phone,
+            updatedAt: Date.now(),
+          });
+          updated++;
+        }
+      }
+    }
+
+    return { totalLeads: allLeads.length, updated };
   },
 });
 

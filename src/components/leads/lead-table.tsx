@@ -32,11 +32,13 @@ export type Lead = {
   firstName?: string;
   lastName?: string;
   title?: string;
+  phone?: string;
+  companyPhone?: string;
   source: string;
   status: string;
   validationScore?: number;
   createdAt: number;
-  company?: { name: string } | null;
+  company?: { name: string; phone?: string } | null;
 };
 
 const columns: ColumnDef<Lead>[] = [
@@ -106,6 +108,24 @@ const columns: ColumnDef<Lead>[] = [
     cell: ({ row }) => (
       <span className="text-sm">
         {row.original.company?.name || "\u2014"}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "phone",
+    header: "Mobile",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {row.original.phone || "\u2014"}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "companyPhone",
+    header: "Company Phone",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">
+        {row.original.companyPhone || row.original.company?.phone || "\u2014"}
       </span>
     ),
   },

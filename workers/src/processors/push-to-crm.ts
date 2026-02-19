@@ -12,7 +12,8 @@ function buildPayload(lead: any): NovaCrmLeadPayload {
   return {
     name: fullName,
     email: lead.email,
-    phone: lead.phone || undefined,
+    phone: lead.companyPhone || undefined,
+    mobile: lead.phone || undefined,
     organization_name: lead.companyName || undefined,
     role: lead.title || undefined,
     interest: lead.industry || "Lead from LeadGen",

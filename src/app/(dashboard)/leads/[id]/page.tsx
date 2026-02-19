@@ -102,7 +102,15 @@ export default function LeadDetailPage({
             {lead.phone && (
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Mobile:</span>
                 <span>{lead.phone}</span>
+              </div>
+            )}
+            {(lead.companyPhone || lead.company?.phone) && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Company:</span>
+                <span>{lead.companyPhone || lead.company?.phone}</span>
               </div>
             )}
             {lead.title && (
@@ -275,6 +283,7 @@ export default function LeadDetailPage({
                         firstName: lead.firstName,
                         lastName: lead.lastName,
                         phone: lead.phone,
+                        companyPhone: lead.companyPhone || lead.company?.phone,
                         title: lead.title,
                         companyName: lead.company?.name,
                         industry: lead.company?.industry,

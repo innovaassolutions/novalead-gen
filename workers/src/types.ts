@@ -31,6 +31,7 @@ export interface NovaCrmLeadPayload {
   name: string;
   email: string;
   phone?: string;
+  mobile?: string;
   organization_name?: string;
   role?: string;
   interest?: string;

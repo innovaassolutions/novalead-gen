@@ -71,6 +71,7 @@ http.route({
       lastName: lead.lastName,
       title: lead.title,
       phone: lead.phone,
+      companyPhone: lead.companyPhone,
       linkedinUrl: lead.linkedinUrl,
       personalEmail: lead.personalEmail,
       source: lead.source,

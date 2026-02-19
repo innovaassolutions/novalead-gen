@@ -88,10 +88,9 @@ export async function fetchWebPage(url: string): Promise<string | null> {
  * Strip HTML tags and clean up whitespace to get readable text.
  */
 function stripHtml(html: string): string {
-  // Remove script and style blocks (keep footer — it often contains phone numbers)
+  // Remove script and style blocks (keep footer and nav — they often contain phone numbers)
   let text = html.replace(/<script[\s\S]*?<\/script>/gi, "");
   text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
-  text = text.replace(/<nav[\s\S]*?<\/nav>/gi, "");
 
   // Extract tel: links before stripping tags (common source of phone numbers)
   const telLinks = html.match(/href=["']tel:([^"']+)["']/gi) || [];

@@ -8,6 +8,7 @@ export default defineSchema({
     lastName: v.optional(v.string()),
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
+    companyPhone: v.optional(v.string()),
     linkedinUrl: v.optional(v.string()),
     personalEmail: v.optional(v.string()),
     source: v.union(
