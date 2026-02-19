@@ -7,7 +7,7 @@
  *   - PATCH the NovaCRM lead with phone and mobile fields
  *
  * Usage:
- *   CONVEX_URL=... NOVACRM_URL=... NOVACRM_LEAD_API_KEY=... RAILWAY_WORKER_SECRET=... \
+ *   CONVEX_URL=... NOVACRM_URL=... NOVACRM_LEADGEN_API_KEY=... \
  *     npx tsx workers/src/scripts/backfill-crm-phones.ts
  *
  * Safe to run multiple times — only patches, never deletes.
@@ -15,11 +15,10 @@
 
 const CONVEX_URL = process.env.CONVEX_URL;
 const NOVACRM_URL = process.env.NOVACRM_URL;
-const NOVACRM_LEAD_API_KEY = process.env.NOVACRM_LEAD_API_KEY;
-const RAILWAY_WORKER_SECRET = process.env.RAILWAY_WORKER_SECRET;
+const NOVACRM_LEADGEN_API_KEY = process.env.NOVACRM_LEADGEN_API_KEY;
 
-if (!CONVEX_URL || !NOVACRM_URL || !NOVACRM_LEAD_API_KEY || !RAILWAY_WORKER_SECRET) {
-  console.error("Missing required env vars: CONVEX_URL, NOVACRM_URL, NOVACRM_LEAD_API_KEY, RAILWAY_WORKER_SECRET");
+if (!CONVEX_URL || !NOVACRM_URL || !NOVACRM_LEADGEN_API_KEY) {
+  console.error("Missing required env vars: CONVEX_URL, NOVACRM_URL, NOVACRM_LEADGEN_API_KEY");
   process.exit(1);
 }
 
@@ -57,11 +56,9 @@ async function fetchPushedLeads(): Promise<ConvexLead[]> {
 }
 
 async function findNovaCrmLeadByEmail(email: string): Promise<{ id: string } | null> {
-  // NovaCRM doesn't have a search-by-email endpoint, so we search via the leads list
-  // We'll use the Supabase-backed API
-  const response = await fetch(`${NOVACRM_URL}/api/leads?email=${encodeURIComponent(email)}`, {
+  const response = await fetch(`${NOVACRM_URL}/api/leads/search?email=${encodeURIComponent(email)}`, {
     headers: {
-      "x-api-key": NOVACRM_LEAD_API_KEY!,
+      "x-api-key": NOVACRM_LEADGEN_API_KEY!,
     },
   });
 
@@ -69,9 +66,7 @@ async function findNovaCrmLeadByEmail(email: string): Promise<{ id: string } | n
 
   const data = await response.json();
   const leads = data.leads || [];
-  // Match by email
-  const match = leads.find((l: any) => l.email === email);
-  return match ? { id: match.id } : null;
+  return leads.length > 0 ? { id: leads[0].id } : null;
 }
 
 async function patchNovaCrmLead(leadId: string, phone: string | undefined, mobile: string | undefined): Promise<boolean> {
@@ -85,7 +80,7 @@ async function patchNovaCrmLead(leadId: string, phone: string | undefined, mobil
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": NOVACRM_LEAD_API_KEY!,
+      "x-api-key": NOVACRM_LEADGEN_API_KEY!,
     },
     body: JSON.stringify(body),
   });
