@@ -21,6 +21,10 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "NovaLead - AI-Powered Lead Generation",
   description: "AI-powered lead generation, enrichment, and campaign management by Innovaas Solutions",
+  icons: {
+    icon: "/novalead-icon.svg",
+    apple: "/novalead-icon.svg",
+  },
 };
 
 export default function RootLayout({
