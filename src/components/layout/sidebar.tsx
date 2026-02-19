@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -13,7 +14,6 @@ import {
   Upload,
   Plug,
   Settings,
-  Zap,
 } from "lucide-react";
 
 const navItems = [
@@ -33,10 +33,13 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
-      <div className="flex h-14 items-center border-b px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <Zap className="h-5 w-5 text-primary" />
-          <span>NovaLead</span>
+      <div className="flex h-14 items-center border-b px-4">
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/novalead-icon.svg" alt="NovaLead" width={28} height={28} />
+          <span className="font-[var(--font-display)] text-lg">
+            <span className="font-extrabold text-foreground">Nova</span>
+            <span className="font-normal text-muted-foreground">Lead</span>
+          </span>
         </Link>
       </div>
       <nav className="flex-1 space-y-1 p-3">
@@ -52,7 +55,7 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  ? "bg-sidebar-accent text-primary border-l-2 border-primary"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
               )}
             >
