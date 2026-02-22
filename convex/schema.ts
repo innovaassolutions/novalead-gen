@@ -238,7 +238,9 @@ export default defineSchema({
     type: v.union(
       v.literal("trends"),
       v.literal("jobs"),
-      v.literal("reddit")
+      v.literal("reddit"),
+      v.literal("clutch"),
+      v.literal("upwork")
     ),
     terms: v.array(v.string()),
     geo: v.string(),
@@ -264,7 +266,9 @@ export default defineSchema({
     sourceType: v.union(
       v.literal("trends"),
       v.literal("jobs"),
-      v.literal("reddit")
+      v.literal("reddit"),
+      v.literal("clutch"),
+      v.literal("upwork")
     ),
     timelineData: v.optional(v.any()),
     averages: v.optional(v.any()),

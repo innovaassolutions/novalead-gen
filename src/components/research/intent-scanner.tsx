@@ -19,6 +19,8 @@ import {
   ArrowRight,
   X,
   Plus,
+  Star,
+  ShoppingBag,
 } from "lucide-react";
 
 interface IntentScannerProps {
@@ -34,8 +36,12 @@ interface IntentScannerProps {
   ) => void;
   activeJobSessionId?: Id<"research"> | null;
   activeRedditSessionId?: Id<"research"> | null;
+  activeClutchSessionId?: Id<"research"> | null;
+  activeUpworkSessionId?: Id<"research"> | null;
   onJobSessionCreated: (id: Id<"research">) => void;
   onRedditSessionCreated: (id: Id<"research">) => void;
+  onClutchSessionCreated: (id: Id<"research">) => void;
+  onUpworkSessionCreated: (id: Id<"research">) => void;
 }
 
 export function IntentScanner({
@@ -44,14 +50,20 @@ export function IntentScanner({
   onComplete,
   activeJobSessionId,
   activeRedditSessionId,
+  activeClutchSessionId,
+  activeUpworkSessionId,
   onJobSessionCreated,
   onRedditSessionCreated,
+  onClutchSessionCreated,
+  onUpworkSessionCreated,
 }: IntentScannerProps) {
   const [terms, setTerms] = useState<string[]>(
     initialTerms.length > 0 ? initialTerms : [""]
   );
   const [searchJobs, setSearchJobs] = useState(true);
   const [searchReddit, setSearchReddit] = useState(true);
+  const [searchClutch, setSearchClutch] = useState(true);
+  const [searchUpwork, setSearchUpwork] = useState(true);
   const [location, setLocation] = useState("United States");
   const [submitting, setSubmitting] = useState(false);
 
@@ -66,6 +78,15 @@ export function IntentScanner({
     api.research.getById,
     activeRedditSessionId ? { id: activeRedditSessionId } : "skip"
   );
+  const clutchSession = useQuery(
+    api.research.getById,
+    activeClutchSessionId ? { id: activeClutchSessionId } : "skip"
+  );
+  const upworkSession = useQuery(
+    api.research.getById,
+    activeUpworkSessionId ? { id: activeUpworkSessionId } : "skip"
+  );
+
   const jobResults = useQuery(
     api.research.getResults,
     activeJobSessionId ? { researchId: activeJobSessionId } : "skip"
@@ -74,9 +95,19 @@ export function IntentScanner({
     api.research.getResults,
     activeRedditSessionId ? { researchId: activeRedditSessionId } : "skip"
   );
+  const clutchResults = useQuery(
+    api.research.getResults,
+    activeClutchSessionId ? { researchId: activeClutchSessionId } : "skip"
+  );
+  const upworkResults = useQuery(
+    api.research.getResults,
+    activeUpworkSessionId ? { researchId: activeUpworkSessionId } : "skip"
+  );
 
   const jobData = jobResults?.find((r) => r.sourceType === "jobs");
   const redditData = redditResults?.find((r) => r.sourceType === "reddit");
+  const clutchData = clutchResults?.find((r) => r.sourceType === "clutch");
+  const upworkData = upworkResults?.find((r) => r.sourceType === "upwork");
 
   const addTerm = () => {
     if (terms.length < 5) setTerms([...terms, ""]);
@@ -96,12 +127,16 @@ export function IntentScanner({
 
   const handleScan = async () => {
     const validTerms = terms.filter((t) => t.trim());
-    if (!validTerms.length || (!searchJobs && !searchReddit)) return;
+    if (
+      !validTerms.length ||
+      (!searchJobs && !searchReddit && !searchClutch && !searchUpwork)
+    )
+      return;
     setSubmitting(true);
 
     try {
       if (searchJobs) {
-        const jobId = await createResearch({
+        const id = await createResearch({
           name: `Jobs: ${validTerms[0]}`,
           type: "jobs",
           terms: validTerms,
@@ -109,11 +144,11 @@ export function IntentScanner({
           config: { location },
           funnelGroup,
         });
-        onJobSessionCreated(jobId);
+        onJobSessionCreated(id);
       }
 
       if (searchReddit) {
-        const redditId = await createResearch({
+        const id = await createResearch({
           name: `Reddit: ${validTerms[0]}`,
           type: "reddit",
           terms: validTerms,
@@ -121,7 +156,31 @@ export function IntentScanner({
           config: {},
           funnelGroup,
         });
-        onRedditSessionCreated(redditId);
+        onRedditSessionCreated(id);
+      }
+
+      if (searchClutch) {
+        const id = await createResearch({
+          name: `Clutch: ${validTerms[0]}`,
+          type: "clutch",
+          terms: validTerms,
+          geo: "US",
+          config: {},
+          funnelGroup,
+        });
+        onClutchSessionCreated(id);
+      }
+
+      if (searchUpwork) {
+        const id = await createResearch({
+          name: `Upwork: ${validTerms[0]}`,
+          type: "upwork",
+          terms: validTerms,
+          geo: "US",
+          config: {},
+          funnelGroup,
+        });
+        onUpworkSessionCreated(id);
       }
     } catch (error) {
       console.error("Failed to start intent scan:", error);
@@ -130,20 +189,25 @@ export function IntentScanner({
     }
   };
 
-  const isJobRunning =
-    jobSession?.status === "pending" || jobSession?.status === "running";
-  const isRedditRunning =
-    redditSession?.status === "pending" ||
-    redditSession?.status === "running";
-  const isAnyRunning = isJobRunning || isRedditRunning;
+  const isRunning = (session: any) =>
+    session?.status === "pending" || session?.status === "running";
+  const isAnyRunning =
+    isRunning(jobSession) ||
+    isRunning(redditSession) ||
+    isRunning(clutchSession) ||
+    isRunning(upworkSession);
 
   const jobsDone = jobSession?.status === "completed";
   const redditDone = redditSession?.status === "completed";
+  const clutchDone = clutchSession?.status === "completed";
+  const upworkDone = upworkSession?.status === "completed";
   const allDone =
     (!activeJobSessionId || jobsDone) &&
-    (!activeRedditSessionId || redditDone);
+    (!activeRedditSessionId || redditDone) &&
+    (!activeClutchSessionId || clutchDone) &&
+    (!activeUpworkSessionId || upworkDone);
 
-  // Collect discovered companies from both sources
+  // Collect discovered companies from all sources
   const allDiscoveredCompanies: Array<{
     name: string;
     source: string;
@@ -152,30 +216,26 @@ export function IntentScanner({
   }> = [];
   const seenNames = new Set<string>();
 
-  for (const company of jobData?.discoveredCompanies ?? []) {
-    if (!seenNames.has(company.name)) {
-      seenNames.add(company.name);
-      allDiscoveredCompanies.push(company);
+  const addCompanies = (companies: any[] | undefined) => {
+    for (const company of companies ?? []) {
+      if (company.name && !seenNames.has(company.name)) {
+        seenNames.add(company.name);
+        allDiscoveredCompanies.push(company);
+      }
     }
-  }
-  for (const company of redditData?.discoveredCompanies ?? []) {
-    if (!seenNames.has(company.name)) {
-      seenNames.add(company.name);
-      allDiscoveredCompanies.push(company);
-    }
-  }
+  };
+
+  addCompanies(jobData?.discoveredCompanies);
+  addCompanies(redditData?.discoveredCompanies);
+  addCompanies(clutchData?.discoveredCompanies);
+  addCompanies(upworkData?.discoveredCompanies);
 
   const handleReviewAndPush = () => {
     onComplete(allDiscoveredCompanies);
   };
 
-  // Highlight AI keywords in text
-  const highlightAIKeywords = (text: string) => {
-    if (!text) return text;
-    const keywords =
-      /\b(AI|artificial intelligence|machine learning|deep learning|NLP|LLM|GPT|automation|ChatGPT|generative AI)\b/gi;
-    return text.replace(keywords, "**$1**");
-  };
+  const hasAnySources =
+    searchJobs || searchReddit || searchClutch || searchUpwork;
 
   return (
     <div className="space-y-6">
@@ -192,7 +252,7 @@ export function IntentScanner({
             {terms.map((term, i) => (
               <div key={i} className="flex gap-2">
                 <Input
-                  placeholder="e.g., AI for law firms"
+                  placeholder="e.g., healthcare, legal, real estate"
                   value={term}
                   onChange={(e) => updateTerm(i, e.target.value)}
                   disabled={isAnyRunning}
@@ -225,13 +285,35 @@ export function IntentScanner({
             <Label>Data Sources</Label>
             <div className="flex items-center gap-2">
               <Checkbox
+                id="search-clutch"
+                checked={searchClutch}
+                onCheckedChange={(checked) => setSearchClutch(!!checked)}
+                disabled={isAnyRunning}
+              />
+              <label htmlFor="search-clutch" className="text-sm">
+                Clutch.co (AI service providers + buyer reviews)
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="search-upwork"
+                checked={searchUpwork}
+                onCheckedChange={(checked) => setSearchUpwork(!!checked)}
+                disabled={isAnyRunning}
+              />
+              <label htmlFor="search-upwork" className="text-sm">
+                Upwork (businesses posting AI jobs)
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
                 id="search-jobs"
                 checked={searchJobs}
                 onCheckedChange={(checked) => setSearchJobs(!!checked)}
                 disabled={isAnyRunning}
               />
               <label htmlFor="search-jobs" className="text-sm">
-                Search Job Boards (Google Jobs via SerpAPI)
+                Google Jobs (AI hiring signals)
               </label>
             </div>
             <div className="flex items-center gap-2">
@@ -242,7 +324,7 @@ export function IntentScanner({
                 disabled={isAnyRunning}
               />
               <label htmlFor="search-reddit" className="text-sm">
-                Search Reddit Discussions
+                Reddit (community discussions)
               </label>
             </div>
           </div>
@@ -265,7 +347,7 @@ export function IntentScanner({
               submitting ||
               isAnyRunning ||
               !terms.some((t) => t.trim()) ||
-              (!searchJobs && !searchReddit)
+              !hasAnySources
             }
             className="w-full"
           >
@@ -288,11 +370,118 @@ export function IntentScanner({
           )}
           {redditSession?.status === "failed" && (
             <p className="text-sm text-destructive">
-              Reddit search error: {redditSession.error}
+              Reddit error: {redditSession.error}
+            </p>
+          )}
+          {clutchSession?.status === "failed" && (
+            <p className="text-sm text-destructive">
+              Clutch error: {clutchSession.error}
+            </p>
+          )}
+          {upworkSession?.status === "failed" && (
+            <p className="text-sm text-destructive">
+              Upwork error: {upworkSession.error}
             </p>
           )}
         </CardContent>
       </Card>
+
+      {/* Clutch Results */}
+      {clutchDone && clutchData && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Star className="h-4 w-4" /> Clutch.co Results
+              <Badge variant="secondary">
+                {clutchData.posts?.length ?? 0}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {(clutchData.posts ?? []).map((result: any, i: number) => (
+                <div key={i} className="rounded-md border p-3 space-y-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{result.title}</p>
+                      {result.companyName && (
+                        <p className="text-sm text-primary">
+                          {result.companyName}
+                        </p>
+                      )}
+                    </div>
+                    {result.url && (
+                      <a
+                        href={result.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                  {result.snippet && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {result.snippet}
+                    </p>
+                  )}
+                </div>
+              ))}
+              {(!clutchData.posts || clutchData.posts.length === 0) && (
+                <p className="text-sm text-muted-foreground">
+                  No Clutch results found
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upwork Results */}
+      {upworkDone && upworkData && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShoppingBag className="h-4 w-4" /> Upwork Job Posts
+              <Badge variant="secondary">
+                {upworkData.posts?.length ?? 0}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {(upworkData.posts ?? []).map((result: any, i: number) => (
+                <div key={i} className="rounded-md border p-3 space-y-1">
+                  <div className="flex items-start justify-between">
+                    <p className="text-sm font-medium">{result.title}</p>
+                    {result.url && (
+                      <a
+                        href={result.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                  {result.snippet && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {result.snippet}
+                    </p>
+                  )}
+                </div>
+              ))}
+              {(!upworkData.posts || upworkData.posts.length === 0) && (
+                <p className="text-sm text-muted-foreground">
+                  No Upwork results found
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Job Results */}
       {jobsDone && jobData && (
@@ -424,9 +613,13 @@ export function IntentScanner({
                   </div>
                   <Badge
                     variant={
-                      company.signal === "Job Posting"
+                      company.signal === "Clutch Profile"
                         ? "default"
-                        : "secondary"
+                        : company.signal === "Upwork Job Post"
+                          ? "default"
+                          : company.signal === "Job Posting"
+                            ? "secondary"
+                            : "outline"
                     }
                   >
                     {company.signal}
@@ -444,23 +637,28 @@ export function IntentScanner({
       )}
 
       {/* If all done but no companies discovered */}
-      {allDone && allDiscoveredCompanies.length === 0 && (
-        <Card>
-          <CardContent className="py-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              No companies automatically discovered. Review the job postings
-              and Reddit discussions above for leads.
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => onComplete([])}
-              className="mt-3"
-            >
-              Continue to Review <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      {allDone &&
+        allDiscoveredCompanies.length === 0 &&
+        (activeJobSessionId ||
+          activeRedditSessionId ||
+          activeClutchSessionId ||
+          activeUpworkSessionId) && (
+          <Card>
+            <CardContent className="py-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                No companies automatically extracted. Review the results above
+                for leads to add manually.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => onComplete([])}
+                className="mt-3"
+              >
+                Continue to Review <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        )}
     </div>
   );
 }

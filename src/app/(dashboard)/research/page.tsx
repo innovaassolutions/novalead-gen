@@ -43,6 +43,10 @@ export default function ResearchPage() {
     useState<Id<"research"> | null>(null);
   const [redditSessionId, setRedditSessionId] =
     useState<Id<"research"> | null>(null);
+  const [clutchSessionId, setClutchSessionId] =
+    useState<Id<"research"> | null>(null);
+  const [upworkSessionId, setUpworkSessionId] =
+    useState<Id<"research"> | null>(null);
   const [discoveredCompanies, setDiscoveredCompanies] = useState<
     Array<{ name: string; source: string; signal: string; context: string }>
   >([]);
@@ -172,8 +176,12 @@ export default function ResearchPage() {
           onComplete={handleIntentComplete}
           activeJobSessionId={jobSessionId}
           activeRedditSessionId={redditSessionId}
+          activeClutchSessionId={clutchSessionId}
+          activeUpworkSessionId={upworkSessionId}
           onJobSessionCreated={setJobSessionId}
           onRedditSessionCreated={setRedditSessionId}
+          onClutchSessionCreated={setClutchSessionId}
+          onUpworkSessionCreated={setUpworkSessionId}
         />
       )}
 

@@ -13,7 +13,9 @@ export const create = mutation({
     type: v.union(
       v.literal("trends"),
       v.literal("jobs"),
-      v.literal("reddit")
+      v.literal("reddit"),
+      v.literal("clutch"),
+      v.literal("upwork")
     ),
     terms: v.array(v.string()),
     geo: v.string(),
@@ -60,6 +62,18 @@ export const create = mutation({
         internal.researchActions.fetchReddit,
         actionArgs
       );
+    } else if (args.type === "clutch") {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.researchActions.fetchClutch,
+        actionArgs
+      );
+    } else if (args.type === "upwork") {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.researchActions.fetchUpwork,
+        actionArgs
+      );
     }
 
     return id;
@@ -72,7 +86,9 @@ export const storeResults = internalMutation({
     sourceType: v.union(
       v.literal("trends"),
       v.literal("jobs"),
-      v.literal("reddit")
+      v.literal("reddit"),
+      v.literal("clutch"),
+      v.literal("upwork")
     ),
     timelineData: v.optional(v.any()),
     averages: v.optional(v.any()),

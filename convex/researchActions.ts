@@ -33,6 +33,29 @@ function extractSubreddit(url: string): string | null {
   return match ? match[1] : null;
 }
 
+function extractClutchCompanyName(title: string, snippet: string): string | null {
+  // Clutch profile titles follow "Company Name | Clutch.co" or "Company Name Reviews"
+  const titleMatch = title?.match(/^(.+?)(?:\s*\||\s*[-–]\s*(?:Clutch|Reviews|Rating))/i);
+  if (titleMatch) return titleMatch[1].trim();
+  // Fall back to first segment before pipe/dash
+  const simpleMatch = title?.match(/^(.+?)(?:\s*\||$)/);
+  if (simpleMatch && simpleMatch[1].length < 60) return simpleMatch[1].trim();
+  return null;
+}
+
+function extractUpworkCompanyName(snippet: string): string | null {
+  // Upwork snippets sometimes mention client company names
+  // Look for patterns like "Company Name is looking for" or "Posted by Company"
+  const patterns = [
+    /(?:posted by|client:?|company:?)\s+([A-Z][A-Za-z0-9\s&.]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = snippet?.match(pattern);
+    if (match) return match[1].trim();
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
@@ -116,33 +139,35 @@ export const fetchJobs = internalAction({
     });
 
     try {
-      const queryParts = args.terms.map(
-        (term) =>
-          `"AI implementation" OR "artificial intelligence" OR "machine learning" ${term}`
-      );
-      const searchQuery = queryParts.join(" OR ");
       const location = args.config?.location ?? "United States";
+      const gl =
+        args.geo.toLowerCase() === "worldwide"
+          ? "us"
+          : args.geo.toLowerCase();
 
-      const data = await serpApiRequest({
-        engine: "google_jobs",
-        q: searchQuery,
-        location,
-        gl:
-          args.geo.toLowerCase() === "worldwide"
-            ? "us"
-            : args.geo.toLowerCase(),
-      });
-
-      const jobs = (data.jobs_results ?? []).map((job: any) => ({
-        title: job.title,
-        company: job.company_name,
-        location: job.location,
-        description: job.description,
-        via: job.via,
-        postedAt: job.detected_extensions?.posted_at,
-        applyLink: job.apply_options?.[0]?.link,
-        extensions: job.detected_extensions,
-      }));
+      // Run one SerpAPI call per term for focused results
+      const allJobs: any[] = [];
+      for (const term of args.terms) {
+        const searchQuery = `${term} AI implementation`;
+        const data = await serpApiRequest({
+          engine: "google_jobs",
+          q: searchQuery,
+          location,
+          gl,
+        });
+        const termJobs = (data.jobs_results ?? []).map((job: any) => ({
+          title: job.title,
+          company: job.company_name,
+          location: job.location,
+          description: job.description,
+          via: job.via,
+          postedAt: job.detected_extensions?.posted_at,
+          applyLink: job.apply_options?.[0]?.link,
+          extensions: job.detected_extensions,
+          searchTerm: term,
+        }));
+        allJobs.push(...termJobs);
+      }
 
       const companySet = new Set<string>();
       const discoveredCompanies: Array<{
@@ -151,7 +176,7 @@ export const fetchJobs = internalAction({
         signal: string;
         context: string;
       }> = [];
-      for (const job of jobs) {
+      for (const job of allJobs) {
         if (job.company && !companySet.has(job.company)) {
           companySet.add(job.company);
           discoveredCompanies.push({
@@ -166,7 +191,7 @@ export const fetchJobs = internalAction({
       await ctx.runMutation(internal.research.storeResults, {
         researchId: args.researchId,
         sourceType: "jobs",
-        jobs,
+        jobs: allJobs,
         discoveredCompanies,
       });
     } catch (error: any) {
@@ -191,31 +216,40 @@ export const fetchReddit = internalAction({
     });
 
     try {
-      const queryParts = args.terms.map(
-        (term) => `"AI for" ${term} OR "artificial intelligence" ${term}`
-      );
-      const searchQuery = `site:reddit.com ${queryParts.join(" OR ")}`;
       const subreddit = args.config?.subreddit;
 
-      const params: Record<string, string> = {
-        engine: "google",
-        q: subreddit
-          ? `site:reddit.com/r/${subreddit} ${queryParts.join(" OR ")}`
-          : searchQuery,
-        num: "20",
-      };
+      // Run one search per term for focused results
+      const allPosts: any[] = [];
+      const seenUrls = new Set<string>();
 
-      const data = await serpApiRequest(params);
+      for (const term of args.terms) {
+        const sitePrefix = subreddit
+          ? `site:reddit.com/r/${subreddit}`
+          : "site:reddit.com";
+        const searchQuery = `${sitePrefix} ${term} AI automation OR implementation OR tools`;
 
-      const posts = (data.organic_results ?? []).map((result: any) => ({
-        title: result.title,
-        subreddit: extractSubreddit(result.link),
-        author: null,
-        score: null,
-        url: result.link,
-        selftext: result.snippet,
-        created: result.date,
-      }));
+        const data = await serpApiRequest({
+          engine: "google",
+          q: searchQuery,
+          num: "10",
+        });
+
+        for (const result of data.organic_results ?? []) {
+          if (result.link && !seenUrls.has(result.link)) {
+            seenUrls.add(result.link);
+            allPosts.push({
+              title: result.title,
+              subreddit: extractSubreddit(result.link),
+              author: null,
+              score: null,
+              url: result.link,
+              selftext: result.snippet,
+              created: result.date,
+              searchTerm: term,
+            });
+          }
+        }
+      }
 
       const discoveredCompanies: Array<{
         name: string;
@@ -227,13 +261,169 @@ export const fetchReddit = internalAction({
       await ctx.runMutation(internal.research.storeResults, {
         researchId: args.researchId,
         sourceType: "reddit",
-        posts,
+        posts: allPosts,
         discoveredCompanies,
       });
     } catch (error: any) {
       await ctx.runMutation(internal.research.markFailed, {
         researchId: args.researchId,
         error: error.message ?? "Unknown error fetching Reddit data",
+      });
+    }
+  },
+});
+
+export const fetchClutch = internalAction({
+  args: {
+    researchId: v.id("research"),
+    terms: v.array(v.string()),
+    geo: v.string(),
+    config: v.any(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.runMutation(internal.research.markRunning, {
+      researchId: args.researchId,
+    });
+
+    try {
+      const allResults: any[] = [];
+      const seenUrls = new Set<string>();
+      const companySet = new Set<string>();
+      const discoveredCompanies: Array<{
+        name: string;
+        source: string;
+        signal: string;
+        context: string;
+      }> = [];
+
+      for (const term of args.terms) {
+        // Search Clutch AI provider profiles and reviews
+        const queries = [
+          `site:clutch.co/profile "${term}" AI`,
+          `site:clutch.co "${term}" artificial intelligence implementation`,
+        ];
+
+        for (const q of queries) {
+          const data = await serpApiRequest({
+            engine: "google",
+            q,
+            num: "10",
+          });
+
+          for (const result of data.organic_results ?? []) {
+            if (result.link && !seenUrls.has(result.link)) {
+              seenUrls.add(result.link);
+
+              const companyName = extractClutchCompanyName(
+                result.title,
+                result.snippet
+              );
+
+              allResults.push({
+                title: result.title,
+                url: result.link,
+                snippet: result.snippet,
+                companyName,
+                searchTerm: term,
+              });
+
+              // Clutch profiles are AI service providers — but review snippets
+              // mention the BUYER companies. Both are valuable.
+              if (companyName && !companySet.has(companyName)) {
+                companySet.add(companyName);
+                discoveredCompanies.push({
+                  name: companyName,
+                  source: "clutch",
+                  signal: "Clutch Profile",
+                  context: result.snippet?.slice(0, 120) ?? "",
+                });
+              }
+            }
+          }
+        }
+      }
+
+      await ctx.runMutation(internal.research.storeResults, {
+        researchId: args.researchId,
+        sourceType: "clutch",
+        posts: allResults,
+        discoveredCompanies,
+      });
+    } catch (error: any) {
+      await ctx.runMutation(internal.research.markFailed, {
+        researchId: args.researchId,
+        error: error.message ?? "Unknown error fetching Clutch data",
+      });
+    }
+  },
+});
+
+export const fetchUpwork = internalAction({
+  args: {
+    researchId: v.id("research"),
+    terms: v.array(v.string()),
+    geo: v.string(),
+    config: v.any(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.runMutation(internal.research.markRunning, {
+      researchId: args.researchId,
+    });
+
+    try {
+      const allResults: any[] = [];
+      const seenUrls = new Set<string>();
+      const discoveredCompanies: Array<{
+        name: string;
+        source: string;
+        signal: string;
+        context: string;
+      }> = [];
+
+      for (const term of args.terms) {
+        const searchQuery = `site:upwork.com/freelance-jobs "${term}" AI OR "artificial intelligence" OR "machine learning" OR automation`;
+
+        const data = await serpApiRequest({
+          engine: "google",
+          q: searchQuery,
+          num: "10",
+        });
+
+        for (const result of data.organic_results ?? []) {
+          if (result.link && !seenUrls.has(result.link)) {
+            seenUrls.add(result.link);
+
+            allResults.push({
+              title: result.title,
+              url: result.link,
+              snippet: result.snippet,
+              searchTerm: term,
+            });
+
+            // Try to extract company name from snippet
+            const companyName = extractUpworkCompanyName(result.snippet ?? "");
+            if (companyName) {
+              discoveredCompanies.push({
+                name: companyName,
+                source: "upwork",
+                signal: "Upwork Job Post",
+                context: result.title?.slice(0, 120) ?? "",
+              });
+            }
+          }
+        }
+      }
+
+      await ctx.runMutation(internal.research.storeResults, {
+        researchId: args.researchId,
+        sourceType: "upwork",
+        posts: allResults,
+        discoveredCompanies,
+      });
+    } catch (error: any) {
+      await ctx.runMutation(internal.research.markFailed, {
+        researchId: args.researchId,
+        error: error.message ?? "Unknown error fetching Upwork data",
       });
     }
   },
