@@ -17,6 +17,8 @@ import type * as enrichments from "../enrichments.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as leads from "../leads.js";
+import type * as research from "../research.js";
+import type * as researchActions from "../researchActions.js";
 import type * as scraperRuns from "../scraperRuns.js";
 import type * as settings from "../settings.js";
 
@@ -36,6 +38,8 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   jobs: typeof jobs;
   leads: typeof leads;
+  research: typeof research;
+  researchActions: typeof researchActions;
   scraperRuns: typeof scraperRuns;
   settings: typeof settings;
 }>;

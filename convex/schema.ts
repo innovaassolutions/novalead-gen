@@ -232,4 +232,47 @@ export default defineSchema({
     value: v.any(),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+
+  research: defineTable({
+    name: v.string(),
+    type: v.union(
+      v.literal("trends"),
+      v.literal("jobs"),
+      v.literal("reddit")
+    ),
+    terms: v.array(v.string()),
+    geo: v.string(),
+    config: v.any(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    error: v.optional(v.string()),
+    funnelGroup: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_type", ["type"])
+    .index("by_created", ["createdAt"])
+    .index("by_funnel_group", ["funnelGroup"]),
+
+  researchResults: defineTable({
+    researchId: v.id("research"),
+    sourceType: v.union(
+      v.literal("trends"),
+      v.literal("jobs"),
+      v.literal("reddit")
+    ),
+    timelineData: v.optional(v.any()),
+    averages: v.optional(v.any()),
+    jobs: v.optional(v.any()),
+    posts: v.optional(v.any()),
+    discoveredCompanies: v.optional(v.any()),
+    fetchedAt: v.number(),
+  })
+    .index("by_research", ["researchId"])
+    .index("by_research_type", ["researchId", "sourceType"]),
 });
