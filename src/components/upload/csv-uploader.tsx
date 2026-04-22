@@ -26,38 +26,66 @@ import { Upload, FileText, Check, AlertCircle, Loader2 } from "lucide-react";
 
 const LEAD_FIELDS = [
   { value: "skip", label: "Skip" },
+  // Lead fields
   { value: "email", label: "Email" },
   { value: "firstName", label: "First Name" },
   { value: "lastName", label: "Last Name" },
   { value: "title", label: "Title" },
   { value: "phone", label: "Phone" },
-  { value: "company", label: "Company" },
-  { value: "linkedinUrl", label: "LinkedIn URL" },
   { value: "personalEmail", label: "Personal Email" },
+  { value: "linkedinUrl", label: "LinkedIn URL" },
   { value: "tags", label: "Tags (comma-separated)" },
+  // Company fields
+  { value: "company", label: "Company Name" },
+  { value: "website", label: "Website" },
+  { value: "companyPhone", label: "Company Phone" },
+  { value: "address", label: "Address" },
+  { value: "city", label: "City" },
+  { value: "state", label: "State" },
+  { value: "country", label: "Country" },
+  { value: "zipCode", label: "Zip Code" },
+  { value: "industry", label: "Industry" },
 ];
 
 // Auto-detect mapping by header name
 function autoDetectField(header: string): string {
   const h = header.toLowerCase().trim();
-  if (h.includes("email") && !h.includes("personal")) return "email";
+  // Email
   if (h.includes("personal") && h.includes("email")) return "personalEmail";
+  if (h.includes("email")) return "email";
+  // Contact admin fields common in partner CSVs → email
+  if (h.includes("primaryadmin") || h.includes("primary_admin")) return "email";
+  // Name
   if (h.includes("first") && h.includes("name")) return "firstName";
   if (h === "first" || h === "fname") return "firstName";
   if (h.includes("last") && h.includes("name")) return "lastName";
   if (h === "last" || h === "lname") return "lastName";
-  if (h === "name" || h === "full name" || h === "fullname") return "firstName"; // best guess
+  if (h === "name" || h === "full name" || h === "fullname") return "firstName";
+  // Title / role
   if (h.includes("title") || h.includes("position") || h.includes("role"))
     return "title";
+  // Phone
   if (h.includes("phone") || h.includes("mobile") || h.includes("tel"))
     return "phone";
-  if (
-    h.includes("company") ||
-    h.includes("organization") ||
-    h.includes("org")
-  )
+  // Company name — partner CSVs often use "partnername"
+  if (h === "partnername" || h === "partner_name") return "company";
+  if (h.includes("company") || h.includes("organization") || h.includes("org"))
     return "company";
+  // Website
+  if (h.includes("website") || h.includes("websiteurl") || h.includes("web_site") || h === "url" || h === "web")
+    return "website";
+  // Address / location
+  if (h === "address" || h.includes("street")) return "address";
+  if (h === "city") return "city";
+  if (h === "state" || h === "statelist" || h === "state_list") return "state";
+  if (h === "country" || h === "countrylist" || h === "country_list") return "country";
+  if (h.includes("zip") || h.includes("postal")) return "zipCode";
+  // Industry / segment
+  if (h.includes("industry") || h.includes("businesssegment") || h.includes("business_segment") || h.includes("segment"))
+    return "industry";
+  // LinkedIn
   if (h.includes("linkedin")) return "linkedinUrl";
+  // Tags
   if (h.includes("tag")) return "tags";
   return "skip";
 }
@@ -140,6 +168,9 @@ export function CsvUploader() {
     setError(null);
 
     try {
+      // Company-level fields that go into metadata.company rather than the lead row
+      const COMPANY_FIELDS = new Set(["company", "website", "address", "city", "state", "country", "zipCode", "industry"]);
+
       const leads = allRows
         .filter((row) => row[emailCol]?.trim())
         .map((row) => {
@@ -147,28 +178,37 @@ export function CsvUploader() {
             email: "",
             source: "csv_upload" as const,
             tags: [] as string[],
-            metadata: {},
+            metadata: { company: {} as Record<string, string>, raw: {} as Record<string, string> },
           };
 
           headers.forEach((h, i) => {
             const field = mapping[h];
             const value = row[i]?.trim();
-            if (!value || field === "skip") return;
+
+            // Spill skipped (or empty) columns into metadata.raw to preserve all data
+            if (!value) return;
+            if (field === "skip") {
+              (lead.metadata as Record<string, Record<string, string>>).raw[h] = value;
+              return;
+            }
 
             if (field === "tags") {
               lead.tags = value
                 .split(",")
                 .map((t: string) => t.trim())
                 .filter(Boolean);
-            } else if (field === "company") {
-              lead.metadata = {
-                ...(lead.metadata as Record<string, unknown>),
-                companyName: value,
-              };
+            } else if (COMPANY_FIELDS.has(field)) {
+              const key = field === "company" ? "name" : field;
+              (lead.metadata as Record<string, Record<string, string>>).company[key] = value;
             } else {
               lead[field] = value;
             }
           });
+
+          // Drop empty company/raw objects to keep metadata clean
+          const meta = lead.metadata as Record<string, Record<string, string>>;
+          if (!Object.keys(meta.company).length) delete meta.company;
+          if (!Object.keys(meta.raw).length) delete meta.raw;
 
           return lead;
         });
@@ -187,6 +227,7 @@ export function CsvUploader() {
             lastName?: string;
             title?: string;
             phone?: string;
+            companyPhone?: string;
             linkedinUrl?: string;
             personalEmail?: string;
             source:
