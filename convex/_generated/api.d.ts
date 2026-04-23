@@ -20,6 +20,7 @@ import type * as leads from "../leads.js";
 import type * as research from "../research.js";
 import type * as researchActions from "../researchActions.js";
 import type * as scraperRuns from "../scraperRuns.js";
+import type * as screeningActions from "../screeningActions.js";
 import type * as settings from "../settings.js";
 
 import type {
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   research: typeof research;
   researchActions: typeof researchActions;
   scraperRuns: typeof scraperRuns;
+  screeningActions: typeof screeningActions;
   settings: typeof settings;
 }>;
 
