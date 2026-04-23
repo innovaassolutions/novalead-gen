@@ -171,6 +171,81 @@ export const update = mutation({
   },
 });
 
+export const batchCreate = mutation({
+  args: {
+    companies: v.array(
+      v.object({
+        name: v.string(),
+        website: v.optional(v.string()),
+        domain: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        address: v.optional(v.string()),
+        city: v.optional(v.string()),
+        state: v.optional(v.string()),
+        zipCode: v.optional(v.string()),
+        country: v.optional(v.string()),
+        metadata: v.optional(v.any()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    let created = 0;
+    let skipped = 0;
+    const ids: string[] = [];
+
+    for (const company of args.companies) {
+      // Dedup by exact name
+      const existing = await ctx.db
+        .query("companies")
+        .withIndex("by_name", (q) => q.eq("name", company.name))
+        .first();
+
+      if (existing) {
+        skipped++;
+        ids.push(existing._id);
+        continue;
+      }
+
+      const now = Date.now();
+      const id = await ctx.db.insert("companies", {
+        name: company.name,
+        website: company.website,
+        domain: company.domain,
+        phone: company.phone,
+        address: company.address,
+        city: company.city,
+        state: company.state,
+        zipCode: company.zipCode,
+        country: company.country,
+        source: "manual",
+        metadata: company.metadata ?? {},
+        createdAt: now,
+      });
+
+      created++;
+      ids.push(id);
+
+      // Auto-queue enrichment to find contacts at this company
+      await ctx.db.insert("jobs", {
+        type: "enrich_company",
+        status: "pending",
+        priority: 4,
+        payload: {
+          companyId: id,
+          companyName: company.name,
+          domain: company.domain,
+          companyPhone: company.phone,
+        },
+        attempts: 0,
+        maxAttempts: 3,
+        createdAt: now,
+      });
+    }
+
+    return { created, skipped, ids };
+  },
+});
+
 export const getByDomain = query({
   args: { domain: v.string() },
   handler: async (ctx, args) => {
