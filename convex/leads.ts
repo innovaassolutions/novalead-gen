@@ -229,7 +229,17 @@ export const list = query({
       );
     }
 
-    return await baseQuery.order("desc").paginate(args.paginationOpts);
+    const page = await baseQuery.order("desc").paginate(args.paginationOpts);
+
+    // Join company name for each lead
+    const enriched = await Promise.all(
+      page.page.map(async (lead) => {
+        const company = lead.companyId ? await ctx.db.get(lead.companyId) : null;
+        return { ...lead, company: company ? { name: company.name, phone: company.phone } : null };
+      })
+    );
+
+    return { ...page, page: enriched };
   },
 });
 
