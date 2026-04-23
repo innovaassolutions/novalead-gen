@@ -16,6 +16,7 @@ export default function LeadsPage() {
   const [search, setSearch] = useState("");
 
   const batchPushToCrm = useMutation(api.leads.batchPushToCrm);
+  const batchDelete = useMutation(api.leads.batchDelete);
 
   const {
     results,
@@ -50,6 +51,10 @@ export default function LeadsPage() {
 
   const handlePushToCrm = async (ids: string[]) => {
     await batchPushToCrm({ ids: ids as Id<"leads">[] });
+  };
+
+  const handleDelete = async (ids: string[]) => {
+    await batchDelete({ ids: ids as Id<"leads">[] });
   };
 
   return (
@@ -93,6 +98,7 @@ export default function LeadsPage() {
         }>}
         isLoading={isLoading}
         onPushToCrm={handlePushToCrm}
+        onDelete={handleDelete}
       />
 
       {canLoadMore && (

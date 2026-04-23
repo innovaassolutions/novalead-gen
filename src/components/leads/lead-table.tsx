@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUpDown, Send } from "lucide-react";
+import { ArrowUpDown, Send, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
 
@@ -200,14 +200,18 @@ export function LeadTable({
   leads,
   isLoading,
   onPushToCrm,
+  onDelete,
 }: {
   leads: Lead[];
   isLoading?: boolean;
   onPushToCrm?: (ids: string[]) => Promise<void>;
+  onDelete?: (ids: string[]) => Promise<void>;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isPushing, setIsPushing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const table = useReactTable({
     data: leads,
@@ -240,6 +244,22 @@ export function LeadTable({
       setRowSelection({});
     } finally {
       setIsPushing(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    if (!onDelete || selectedCount === 0) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(selectedRows.map((row) => row.original._id));
+      setRowSelection({});
+      setConfirmDelete(false);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -277,13 +297,50 @@ export function LeadTable({
               {notEligibleCount} already pushed or not eligible
             </span>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setRowSelection({})}
-          >
-            Clear
-          </Button>
+          {onDelete && (
+            confirmDelete ? (
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-sm text-destructive font-medium">
+                  Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?
+                </span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Confirm"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto text-destructive hover:text-destructive"
+                onClick={handleDelete}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete {selectedCount}
+              </Button>
+            )
+          )}
+          {!onDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRowSelection({})}
+            >
+              Clear
+            </Button>
+          )}
         </div>
       )}
       <div className="rounded-md border">

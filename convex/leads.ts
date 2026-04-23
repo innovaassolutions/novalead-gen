@@ -441,6 +441,28 @@ export const backfillCompanyPhone = mutation({
   },
 });
 
+export const batchDelete = mutation({
+  args: { ids: v.array(v.id("leads")) },
+  handler: async (ctx, args) => {
+    let deleted = 0;
+    for (const id of args.ids) {
+      const lead = await ctx.db.get(id);
+      if (!lead) continue;
+      // Remove from any campaigns
+      const campaignLeads = await ctx.db
+        .query("campaignLeads")
+        .withIndex("by_lead", (q) => q.eq("leadId", id))
+        .collect();
+      for (const cl of campaignLeads) {
+        await ctx.db.delete(cl._id);
+      }
+      await ctx.db.delete(id);
+      deleted++;
+    }
+    return { deleted };
+  },
+});
+
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
