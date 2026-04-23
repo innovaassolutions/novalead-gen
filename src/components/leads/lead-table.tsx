@@ -3,10 +3,12 @@
 import { useState } from "react";
 import {
   ColumnDef,
+  ColumnFiltersState,
   flexRender,
   getCoreRowModel,
-  useReactTable,
+  getFilteredRowModel,
   getSortedRowModel,
+  useReactTable,
   SortingState,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -21,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -29,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowUpDown, Send, Trash2, FolderPlus } from "lucide-react";
+import { ArrowUpDown, Send, Trash2, FolderPlus, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
 
@@ -47,6 +50,9 @@ export type Lead = {
   createdAt: number;
   company?: { name: string; phone?: string; industry?: string } | null;
 };
+
+// Filterable column ids
+const FILTER_COLUMNS = ["name", "email", "title", "company", "industry", "status"];
 
 const columns: ColumnDef<Lead>[] = [
   {
@@ -69,19 +75,16 @@ const columns: ColumnDef<Lead>[] = [
       />
     ),
     enableSorting: false,
+    enableColumnFilter: false,
   },
   {
-    accessorKey: "name",
+    id: "name",
+    accessorFn: (row) => `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim(),
     header: "Name",
     cell: ({ row }) => {
-      const first = row.original.firstName || "";
-      const last = row.original.lastName || "";
-      const name = `${first} ${last}`.trim() || "\u2014";
+      const name = `${row.original.firstName ?? ""} ${row.original.lastName ?? ""}`.trim() || "\u2014";
       return (
-        <Link
-          href={`/leads/${row.original._id}`}
-          className="font-medium hover:underline"
-        >
+        <Link href={`/leads/${row.original._id}`} className="font-medium hover:underline whitespace-nowrap">
           {name}
         </Link>
       );
@@ -90,11 +93,7 @@ const columns: ColumnDef<Lead>[] = [
   {
     accessorKey: "email",
     header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="p-0 hover:bg-transparent"
-        onClick={() => column.toggleSorting()}
-      >
+      <Button variant="ghost" className="p-0 hover:bg-transparent" onClick={() => column.toggleSorting()}>
         Email <ArrowUpDown className="ml-1 h-3 w-3" />
       </Button>
     ),
@@ -104,35 +103,37 @@ const columns: ColumnDef<Lead>[] = [
     accessorKey: "title",
     header: "Title",
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.title || "\u2014"}
-      </span>
+      <span className="text-sm text-muted-foreground">{row.original.title || "\u2014"}</span>
     ),
   },
   {
-    accessorKey: "company",
+    id: "company",
+    accessorFn: (row) => row.company?.name ?? "",
     header: "Company",
     cell: ({ row }) => (
-      <div>
-        <span className="text-sm">{row.original.company?.name || "\u2014"}</span>
-        {row.original.company?.industry && (
-          <p className="text-xs text-muted-foreground">{row.original.company.industry}</p>
-        )}
-      </div>
+      <span className="text-sm">{row.original.company?.name || "\u2014"}</span>
+    ),
+  },
+  {
+    id: "industry",
+    accessorFn: (row) => row.company?.industry ?? "",
+    header: "Industry",
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">{row.original.company?.industry || "\u2014"}</span>
     ),
   },
   {
     accessorKey: "phone",
     header: "Mobile",
+    enableColumnFilter: false,
     cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {row.original.phone || "\u2014"}
-      </span>
+      <span className="text-sm text-muted-foreground">{row.original.phone || "\u2014"}</span>
     ),
   },
   {
     accessorKey: "companyPhone",
     header: "Company Phone",
+    enableColumnFilter: false,
     cell: ({ row }) => (
       <span className="text-sm text-muted-foreground">
         {row.original.companyPhone || row.original.company?.phone || "\u2014"}
@@ -142,22 +143,22 @@ const columns: ColumnDef<Lead>[] = [
   {
     accessorKey: "source",
     header: "Source",
+    enableColumnFilter: false,
     cell: ({ row }) => (
-      <Badge variant="outline" className="text-xs">
+      <Badge variant="outline" className="text-xs whitespace-nowrap">
         {row.original.source.replace(/_/g, " ")}
       </Badge>
     ),
   },
   {
+    id: "status",
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => {
       const status = row.original.status;
       const colorClass = STATUS_COLORS[status] || "bg-gray-100 text-gray-800";
       return (
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}
-        >
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${colorClass}`}>
           {status.replace(/_/g, " ")}
         </span>
       );
@@ -165,36 +166,24 @@ const columns: ColumnDef<Lead>[] = [
   },
   {
     accessorKey: "validationScore",
+    enableColumnFilter: false,
     header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="p-0 hover:bg-transparent"
-        onClick={() => column.toggleSorting()}
-      >
+      <Button variant="ghost" className="p-0 hover:bg-transparent" onClick={() => column.toggleSorting()}>
         Score <ArrowUpDown className="ml-1 h-3 w-3" />
       </Button>
     ),
     cell: ({ row }) => {
       const score = row.original.validationScore;
-      if (score == null)
-        return <span className="text-sm text-muted-foreground">{"\u2014"}</span>;
-      const color =
-        score >= 70
-          ? "text-green-600"
-          : score >= 40
-            ? "text-yellow-600"
-            : "text-red-600";
+      if (score == null) return <span className="text-sm text-muted-foreground">{"\u2014"}</span>;
+      const color = score >= 70 ? "text-green-600" : score >= 40 ? "text-yellow-600" : "text-red-600";
       return <span className={`text-sm font-medium ${color}`}>{score}</span>;
     },
   },
   {
     accessorKey: "createdAt",
+    enableColumnFilter: false,
     header: ({ column }) => (
-      <Button
-        variant="ghost"
-        className="p-0 hover:bg-transparent"
-        onClick={() => column.toggleSorting()}
-      >
+      <Button variant="ghost" className="p-0 hover:bg-transparent" onClick={() => column.toggleSorting()}>
         Created <ArrowUpDown className="ml-1 h-3 w-3" />
       </Button>
     ),
@@ -223,6 +212,8 @@ export function LeadTable({
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [showFilters, setShowFilters] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -234,13 +225,17 @@ export function LeadTable({
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     enableRowSelection: true,
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
-    state: { sorting, rowSelection },
+    onColumnFiltersChange: setColumnFilters,
+    state: { sorting, rowSelection, columnFilters },
     getRowId: (row) => row._id,
+    filterFns: {},
   });
 
+  const activeFilterCount = columnFilters.length;
   const selectedRows = table.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
   const pushableRows = selectedRows.filter(
@@ -264,10 +259,7 @@ export function LeadTable({
   };
 
   const handleDelete = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
+    if (!confirmDelete) { setConfirmDelete(true); return; }
     if (!onDelete || selectedCount === 0) return;
     setIsDeleting(true);
     try {
@@ -303,21 +295,14 @@ export function LeadTable({
 
   return (
     <div className="space-y-3">
+      {/* Selection action bar */}
       {selectedCount > 0 && (
         <div className="flex items-center gap-3 rounded-lg border bg-muted/50 px-4 py-3">
-          <span className="text-sm font-medium">
-            {selectedCount} selected
-          </span>
+          <span className="text-sm font-medium">{selectedCount} selected</span>
           {pushableCount > 0 && onPushToCrm && (
-            <Button
-              size="sm"
-              onClick={handlePush}
-              disabled={isPushing}
-            >
+            <Button size="sm" onClick={handlePush} disabled={isPushing}>
               <Send className="mr-2 h-4 w-4" />
-              {isPushing
-                ? "Pushing..."
-                : `Push ${pushableCount} to NovaCRM`}
+              {isPushing ? "Pushing..." : `Push ${pushableCount} to NovaCRM`}
             </Button>
           )}
           {notEligibleCount > 0 && (
@@ -333,18 +318,11 @@ export function LeadTable({
                 </SelectTrigger>
                 <SelectContent>
                   {campaigns.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      {c.name}
-                    </SelectItem>
+                    <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAddToCampaign}
-                disabled={isAddingToCampaign || !selectedCampaignId}
-              >
+              <Button size="sm" variant="outline" onClick={handleAddToCampaign} disabled={isAddingToCampaign || !selectedCampaignId}>
                 <FolderPlus className="mr-2 h-4 w-4" />
                 {isAddingToCampaign ? "Adding..." : "Add to Campaign"}
               </Button>
@@ -356,71 +334,94 @@ export function LeadTable({
                 <span className="text-sm text-destructive font-medium">
                   Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?
                 </span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                >
+                <Button size="sm" variant="destructive" onClick={handleDelete} disabled={isDeleting}>
                   {isDeleting ? "Deleting..." : "Confirm"}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setConfirmDelete(false)}
-                  disabled={isDeleting}
-                >
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)} disabled={isDeleting}>
                   Cancel
                 </Button>
               </div>
             ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="ml-auto text-destructive hover:text-destructive"
-                onClick={handleDelete}
-              >
+              <Button size="sm" variant="outline" className="ml-auto text-destructive hover:text-destructive" onClick={handleDelete}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete {selectedCount}
               </Button>
             )
           )}
           {!onDelete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setRowSelection({})}
-            >
-              Clear
-            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setRowSelection({})}>Clear</Button>
           )}
         </div>
       )}
+
+      {/* Column filter toggle */}
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setShowFilters(!showFilters);
+            if (showFilters) setColumnFilters([]);
+          }}
+          className={showFilters ? "border-primary text-primary" : ""}
+        >
+          <SlidersHorizontal className="mr-2 h-4 w-4" />
+          Column Filters
+          {activeFilterCount > 0 && (
+            <Badge className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+              {activeFilterCount}
+            </Badge>
+          )}
+        </Button>
+        {activeFilterCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setColumnFilters([])}>
+            <X className="mr-1 h-3 w-3" /> Clear filters
+          </Button>
+        )}
+        <span className="text-sm text-muted-foreground ml-auto">
+          {table.getFilteredRowModel().rows.length} of {leads.length} leads
+        </span>
+      </div>
+
+      {/* Table */}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
+            {/* Column headers */}
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
               </TableRow>
             ))}
+            {/* Filter inputs row */}
+            {showFilters && (
+              <TableRow className="hover:bg-transparent">
+                {table.getHeaderGroups()[0].headers.map((header) => {
+                  const canFilter = FILTER_COLUMNS.includes(header.column.id);
+                  return (
+                    <TableHead key={`filter-${header.id}`} className="py-1 px-2">
+                      {canFilter ? (
+                        <Input
+                          placeholder={`Filter…`}
+                          value={(header.column.getFilterValue() as string) ?? ""}
+                          onChange={(e) => header.column.setFilterValue(e.target.value || undefined)}
+                          className="h-7 text-xs"
+                        />
+                      ) : null}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            )}
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
+                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
