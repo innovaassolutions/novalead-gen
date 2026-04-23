@@ -22,7 +22,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUpDown, Send, Trash2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowUpDown, Send, Trash2, FolderPlus } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
 
@@ -201,17 +208,23 @@ export function LeadTable({
   isLoading,
   onPushToCrm,
   onDelete,
+  onAddToCampaign,
+  campaigns,
 }: {
   leads: Lead[];
   isLoading?: boolean;
   onPushToCrm?: (ids: string[]) => Promise<void>;
   onDelete?: (ids: string[]) => Promise<void>;
+  onAddToCampaign?: (ids: string[], campaignId: string) => Promise<void>;
+  campaigns?: { _id: string; name: string }[];
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isPushing, setIsPushing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isAddingToCampaign, setIsAddingToCampaign] = useState(false);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>("");
 
   const table = useReactTable({
     data: leads,
@@ -263,6 +276,18 @@ export function LeadTable({
     }
   };
 
+  const handleAddToCampaign = async () => {
+    if (!onAddToCampaign || !selectedCampaignId || selectedCount === 0) return;
+    setIsAddingToCampaign(true);
+    try {
+      await onAddToCampaign(selectedRows.map((row) => row.original._id), selectedCampaignId);
+      setRowSelection({});
+      setSelectedCampaignId("");
+    } finally {
+      setIsAddingToCampaign(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -296,6 +321,31 @@ export function LeadTable({
             <span className="text-xs text-muted-foreground">
               {notEligibleCount} already pushed or not eligible
             </span>
+          )}
+          {onAddToCampaign && campaigns && campaigns.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+                <SelectTrigger className="w-[180px] h-8 text-sm">
+                  <SelectValue placeholder="Select campaign..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {campaigns.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleAddToCampaign}
+                disabled={isAddingToCampaign || !selectedCampaignId}
+              >
+                <FolderPlus className="mr-2 h-4 w-4" />
+                {isAddingToCampaign ? "Adding..." : "Add to Campaign"}
+              </Button>
+            </div>
           )}
           {onDelete && (
             confirmDelete ? (

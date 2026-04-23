@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { usePaginatedQuery, useMutation } from "convex/react";
+import { usePaginatedQuery, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { LeadTable } from "@/components/leads/lead-table";
 import { LeadFilters } from "@/components/leads/lead-filters";
@@ -17,6 +17,8 @@ export default function LeadsPage() {
 
   const batchPushToCrm = useMutation(api.leads.batchPushToCrm);
   const batchDelete = useMutation(api.leads.batchDelete);
+  const addToCampaign = useMutation(api.campaignLeads.addLeads);
+  const campaigns = useQuery(api.campaigns.list, {});
 
   const {
     results,
@@ -55,6 +57,13 @@ export default function LeadsPage() {
 
   const handleDelete = async (ids: string[]) => {
     await batchDelete({ ids: ids as Id<"leads">[] });
+  };
+
+  const handleAddToCampaign = async (ids: string[], campaignId: string) => {
+    await addToCampaign({
+      campaignId: campaignId as Id<"campaigns">,
+      leadIds: ids as Id<"leads">[],
+    });
   };
 
   return (
@@ -99,6 +108,8 @@ export default function LeadsPage() {
         isLoading={isLoading}
         onPushToCrm={handlePushToCrm}
         onDelete={handleDelete}
+        onAddToCampaign={handleAddToCampaign}
+        campaigns={campaigns ?? []}
       />
 
       {canLoadMore && (
