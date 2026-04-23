@@ -235,7 +235,12 @@ export const list = query({
     const enriched = await Promise.all(
       page.page.map(async (lead) => {
         const company = lead.companyId ? await ctx.db.get(lead.companyId) : null;
-        return { ...lead, company: company ? { name: company.name, phone: company.phone } : null };
+        return {
+          ...lead,
+          company: company
+            ? { name: company.name, phone: company.phone, industry: company.industry }
+            : null,
+        };
       })
     );
 

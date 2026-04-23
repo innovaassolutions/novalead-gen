@@ -16,20 +16,24 @@ interface LeadFiltersProps {
   status: string | undefined;
   source: string | undefined;
   search: string;
+  industry: string;
   onStatusChange: (val: string | undefined) => void;
   onSourceChange: (val: string | undefined) => void;
   onSearchChange: (val: string) => void;
+  onIndustryChange: (val: string) => void;
 }
 
 export function LeadFilters({
   status,
   source,
   search,
+  industry,
   onStatusChange,
   onSourceChange,
   onSearchChange,
+  onIndustryChange,
 }: LeadFiltersProps) {
-  const hasFilters = status || source || search;
+  const hasFilters = status || source || search || industry;
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -71,6 +75,12 @@ export function LeadFilters({
           ))}
         </SelectContent>
       </Select>
+      <Input
+        placeholder="Filter by industry..."
+        value={industry}
+        onChange={(e) => onIndustryChange(e.target.value)}
+        className="w-48"
+      />
       {hasFilters && (
         <Button
           variant="ghost"
@@ -79,6 +89,7 @@ export function LeadFilters({
             onStatusChange(undefined);
             onSourceChange(undefined);
             onSearchChange("");
+            onIndustryChange("");
           }}
         >
           <X className="mr-1 h-3 w-3" /> Clear

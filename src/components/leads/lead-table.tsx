@@ -45,7 +45,7 @@ export type Lead = {
   status: string;
   validationScore?: number;
   createdAt: number;
-  company?: { name: string; phone?: string } | null;
+  company?: { name: string; phone?: string; industry?: string } | null;
 };
 
 const columns: ColumnDef<Lead>[] = [
@@ -113,9 +113,12 @@ const columns: ColumnDef<Lead>[] = [
     accessorKey: "company",
     header: "Company",
     cell: ({ row }) => (
-      <span className="text-sm">
-        {row.original.company?.name || "\u2014"}
-      </span>
+      <div>
+        <span className="text-sm">{row.original.company?.name || "\u2014"}</span>
+        {row.original.company?.industry && (
+          <p className="text-xs text-muted-foreground">{row.original.company.industry}</p>
+        )}
+      </div>
     ),
   },
   {

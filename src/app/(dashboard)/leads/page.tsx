@@ -14,6 +14,7 @@ export default function LeadsPage() {
   const [status, setStatus] = useState<string | undefined>();
   const [source, setSource] = useState<string | undefined>();
   const [search, setSearch] = useState("");
+  const [industry, setIndustry] = useState("");
 
   const batchPushToCrm = useMutation(api.leads.batchPushToCrm);
   const batchDelete = useMutation(api.leads.batchDelete);
@@ -51,6 +52,12 @@ export default function LeadsPage() {
   const isLoading = queryStatus === "LoadingFirstPage";
   const canLoadMore = queryStatus === "CanLoadMore";
 
+  const filteredResults = industry.trim()
+    ? results.filter((lead) =>
+        lead.company?.industry?.toLowerCase().includes(industry.toLowerCase())
+      )
+    : results;
+
   const handlePushToCrm = async (ids: string[]) => {
     await batchPushToCrm({ ids: ids as Id<"leads">[] });
   };
@@ -87,13 +94,15 @@ export default function LeadsPage() {
         status={status}
         source={source}
         search={search}
+        industry={industry}
         onStatusChange={setStatus}
         onSourceChange={setSource}
         onSearchChange={setSearch}
+        onIndustryChange={setIndustry}
       />
 
       <LeadTable
-        leads={results as Array<{
+        leads={filteredResults as Array<{
           _id: string;
           email: string;
           firstName?: string;
@@ -103,7 +112,7 @@ export default function LeadsPage() {
           status: string;
           validationScore?: number;
           createdAt: number;
-          company?: { name: string } | null;
+          company?: { name: string; phone?: string; industry?: string } | null;
         }>}
         isLoading={isLoading}
         onPushToCrm={handlePushToCrm}
