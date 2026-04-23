@@ -28,6 +28,7 @@ const LEAD_FIELDS = [
   { value: "skip", label: "Skip" },
   // Lead fields
   { value: "email", label: "Email" },
+  { value: "extractEmail", label: "Extract Email From Text" },
   { value: "firstName", label: "First Name" },
   { value: "lastName", label: "Last Name" },
   { value: "title", label: "Title" },
@@ -47,12 +48,20 @@ const LEAD_FIELDS = [
   { value: "industry", label: "Industry" },
 ];
 
+// Extract the first email address found in an arbitrary text value
+function extractEmailFromText(text: string): string | null {
+  const match = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0] : null;
+}
+
 // Auto-detect mapping by header name
 function autoDetectField(header: string): string {
   const h = header.toLowerCase().trim();
   // Email
   if (h.includes("personal") && h.includes("email")) return "personalEmail";
   if (h.includes("email")) return "email";
+  // Comment/notes fields that often embed emails in distributor/partner CSVs
+  if (h === "comment" || h === "comments" || h === "notes" || h === "note") return "extractEmail";
   // Contact admin fields common in partner CSVs → email
   if (h.includes("primaryadmin") || h.includes("primary_admin")) return "email";
   // Name
@@ -157,10 +166,11 @@ export function CsvUploader() {
   const handleUpload = async () => {
     if (!allRows.length || !headers.length) return;
 
-    // Must have email mapping
+    // Must have email mapping (direct or extract-from-text)
     const emailCol = headers.findIndex((h) => mapping[h] === "email");
-    if (emailCol === -1) {
-      setError("You must map at least one column to 'Email'.");
+    const extractEmailCol = headers.findIndex((h) => mapping[h] === "extractEmail");
+    if (emailCol === -1 && extractEmailCol === -1) {
+      setError("You must map at least one column to 'Email' or 'Extract Email From Text'.");
       return;
     }
 
@@ -172,10 +182,18 @@ export function CsvUploader() {
       const COMPANY_FIELDS = new Set(["company", "website", "address", "city", "state", "country", "zipCode", "industry"]);
 
       const leads = allRows
-        .filter((row) => row[emailCol]?.trim())
         .map((row) => {
+          // Resolve email: prefer direct mapping, fall back to extraction
+          let resolvedEmail = emailCol !== -1 ? row[emailCol]?.trim() : "";
+          if (!resolvedEmail && extractEmailCol !== -1) {
+            resolvedEmail = extractEmailFromText(row[extractEmailCol] ?? "") ?? "";
+          }
+          return { row, resolvedEmail };
+        })
+        .filter(({ resolvedEmail }) => !!resolvedEmail)
+        .map(({ row, resolvedEmail }) => {
           const lead: Record<string, unknown> = {
-            email: "",
+            email: resolvedEmail,
             source: "csv_upload" as const,
             tags: [] as string[],
             metadata: { company: {} as Record<string, string>, raw: {} as Record<string, string> },
@@ -192,6 +210,12 @@ export function CsvUploader() {
               return;
             }
 
+            // extractEmail already resolved above — store raw comment in metadata.raw too
+            if (field === "extractEmail") {
+              (lead.metadata as Record<string, Record<string, string>>).raw[h] = value;
+              return;
+            }
+
             if (field === "tags") {
               lead.tags = value
                 .split(",")
@@ -200,7 +224,8 @@ export function CsvUploader() {
             } else if (COMPANY_FIELDS.has(field)) {
               const key = field === "company" ? "name" : field;
               (lead.metadata as Record<string, Record<string, string>>).company[key] = value;
-            } else {
+            } else if (field !== "email") {
+              // skip re-assigning email — already set from resolvedEmail
               lead[field] = value;
             }
           });
