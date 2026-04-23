@@ -334,6 +334,43 @@ export const update = mutation({
   },
 });
 
+export const listForScreening = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 500;
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_created")
+      .order("desc")
+      .take(limit);
+
+    return await Promise.all(
+      leads.map(async (lead) => {
+        const company = lead.companyId ? await ctx.db.get(lead.companyId) : null;
+        return {
+          _id: lead._id,
+          email: lead.email,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          title: lead.title,
+          company: company
+            ? {
+                name: company.name,
+                industry: company.industry,
+                description: company.description,
+                keyProducts: company.keyProducts,
+                targetMarket: company.targetMarket,
+                website: company.website,
+              }
+            : null,
+        };
+      })
+    );
+  },
+});
+
 export const getByIds = query({
   args: { ids: v.array(v.id("leads")) },
   handler: async (ctx, args) => {

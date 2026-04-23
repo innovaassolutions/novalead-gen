@@ -1,14 +1,15 @@
 "use client";
 
-import { use } from "react";
-import { useQuery } from "convex/react";
+import { use, useState } from "react";
+import { useQuery, useAction } from "convex/react";
 import { usePaginatedQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Megaphone, Mail, Eye, MessageSquare, AlertTriangle, Users, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Megaphone, Mail, Eye, MessageSquare, AlertTriangle, Users, Loader2, Sparkles, CheckCircle2, XCircle } from "lucide-react";
 import Link from "next/link";
 
 export default function CampaignDetailPage({
@@ -23,6 +24,34 @@ export default function CampaignDetailPage({
     { campaignId: id as Id<"campaigns"> },
     { initialNumItems: 25 }
   );
+
+  const screenLeads = useAction(api.screeningActions.screenLeads);
+  const [criteria, setCriteria] = useState("");
+  const [screening, setScreening] = useState(false);
+  const [screeningResult, setScreeningResult] = useState<{
+    screened: number;
+    qualified: number;
+    results: Array<{ leadId: string; qualified: boolean; confidence: number; reasoning: string }>;
+  } | null>(null);
+  const [screeningError, setScreeningError] = useState<string | null>(null);
+
+  const handleScreen = async () => {
+    if (!criteria.trim()) return;
+    setScreening(true);
+    setScreeningResult(null);
+    setScreeningError(null);
+    try {
+      const result = await screenLeads({
+        campaignId: id as Id<"campaigns">,
+        criteria: criteria.trim(),
+      });
+      setScreeningResult(result);
+    } catch (err) {
+      setScreeningError(err instanceof Error ? err.message : "Screening failed.");
+    } finally {
+      setScreening(false);
+    }
+  };
 
   if (!campaign) {
     return (
@@ -127,6 +156,77 @@ export default function CampaignDetailPage({
               <span className="text-xs text-muted-foreground">Bounced</span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Lead Screening */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            AI Lead Screening
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Describe your ideal lead in plain English. Claude will scan all leads, find matches, and add them to this campaign automatically.
+          </p>
+          <Textarea
+            placeholder='e.g. "Companies involved in data center construction, operation, or infrastructure" or "IT managers and procurement contacts at electrical distributors"'
+            value={criteria}
+            onChange={(e) => setCriteria(e.target.value)}
+            rows={3}
+          />
+          <Button onClick={handleScreen} disabled={screening || !criteria.trim()}>
+            {screening ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Screening leads...</>
+            ) : (
+              <><Sparkles className="mr-2 h-4 w-4" />Screen &amp; Add Qualifying Leads</>
+            )}
+          </Button>
+
+          {screeningError && (
+            <p className="text-sm text-destructive">{screeningError}</p>
+          )}
+
+          {screeningResult && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4 rounded-md border p-3 bg-muted/30">
+                <span className="text-sm font-medium">
+                  {screeningResult.qualified} of {screeningResult.screened} leads qualified
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  — added to campaign automatically
+                </span>
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {screeningResult.results
+                  .filter((r) => r.qualified)
+                  .map((r) => (
+                    <div key={r.leadId} className="flex items-start gap-2 text-sm py-1 border-b last:border-0">
+                      <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                      <span className="text-muted-foreground">{r.reasoning}</span>
+                      <Badge variant="outline" className="ml-auto shrink-0">{r.confidence}%</Badge>
+                    </div>
+                  ))}
+                {screeningResult.results.filter((r) => !r.qualified).length > 0 && (
+                  <details className="text-xs text-muted-foreground cursor-pointer">
+                    <summary>{screeningResult.results.filter((r) => !r.qualified).length} leads did not qualify</summary>
+                    <div className="mt-2 space-y-1">
+                      {screeningResult.results
+                        .filter((r) => !r.qualified)
+                        .map((r) => (
+                          <div key={r.leadId} className="flex items-start gap-2 py-1">
+                            <XCircle className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+                            <span>{r.reasoning}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
