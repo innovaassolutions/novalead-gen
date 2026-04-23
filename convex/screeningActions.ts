@@ -74,7 +74,11 @@ export const screenLeads = action({
     criteria: v.string(),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    screened: number;
+    qualified: number;
+    results: Array<{ leadId: string; qualified: boolean; confidence: number; reasoning: string }>;
+  }> => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set in Convex environment");
 
