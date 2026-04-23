@@ -4,6 +4,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import Anthropic from "@anthropic-ai/sdk";
 import { api } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 
 const BATCH_SIZE = 15;
 
@@ -134,7 +135,7 @@ export const screenLeads = action({
     if (qualifyingIds.length > 0) {
       await ctx.runMutation(api.campaignLeads.addLeads, {
         campaignId: args.campaignId,
-        leadIds: qualifyingIds as Array<typeof args.campaignId>,
+        leadIds: qualifyingIds as unknown as Array<Id<"leads">>,
       });
     }
 
