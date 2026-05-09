@@ -230,6 +230,7 @@ export function LeadTable({
   onDelete,
   onAddToCampaign,
   campaigns,
+  globalFilter,
 }: {
   leads: Lead[];
   isLoading?: boolean;
@@ -237,6 +238,7 @@ export function LeadTable({
   onDelete?: (ids: string[]) => Promise<void>;
   onAddToCampaign?: (ids: string[], campaignId: string) => Promise<void>;
   campaigns?: { _id: string; name: string }[];
+  globalFilter?: string;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -258,9 +260,10 @@ export function LeadTable({
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     onColumnFiltersChange: setColumnFilters,
-    state: { sorting, rowSelection, columnFilters },
+    state: { sorting, rowSelection, columnFilters, globalFilter },
     getRowId: (row) => row._id,
     filterFns: {},
+    globalFilterFn: "includesString",
   });
 
   const activeFilterCount = columnFilters.length;

@@ -248,6 +248,60 @@ export const list = query({
   },
 });
 
+export const listAll = query({
+  args: {
+    status: v.optional(
+      v.union(
+        v.literal("raw"),
+        v.literal("enriching"),
+        v.literal("enriched"),
+        v.literal("validated"),
+        v.literal("invalid"),
+        v.literal("pushed_to_crm"),
+        v.literal("pushed_to_instantly")
+      )
+    ),
+    source: v.optional(
+      v.union(
+        v.literal("google_maps"),
+        v.literal("csv_upload"),
+        v.literal("ai_enrichment"),
+        v.literal("ad_library"),
+        v.literal("manual")
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    let baseQuery;
+
+    if (args.status) {
+      baseQuery = ctx.db
+        .query("leads")
+        .withIndex("by_status", (q) => q.eq("status", args.status!));
+    } else if (args.source) {
+      baseQuery = ctx.db
+        .query("leads")
+        .withIndex("by_source", (q) => q.eq("source", args.source!));
+    } else {
+      baseQuery = ctx.db.query("leads").withIndex("by_created");
+    }
+
+    const leads = await baseQuery.order("desc").collect();
+
+    return Promise.all(
+      leads.map(async (lead) => {
+        const company = lead.companyId ? await ctx.db.get(lead.companyId) : null;
+        return {
+          ...lead,
+          company: company
+            ? { name: company.name, phone: company.phone, industry: company.industry, country: company.country, state: company.state, city: company.city }
+            : null,
+        };
+      })
+    );
+  },
+});
+
 export const getById = query({
   args: { id: v.id("leads") },
   handler: async (ctx, args) => {
