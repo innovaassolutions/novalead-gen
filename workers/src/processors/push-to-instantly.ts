@@ -41,6 +41,8 @@ export async function processPushToInstantly(client: ConvexClient, job: any): Pr
     custom_variables: {
       leadgen_id: lead.leadId || "",
       source: lead.source || "",
+      ...(lead.country ? { country: lead.country } : {}),
+      ...(lead.state ? { state: lead.state } : {}),
       ...(lead.customVariables || {}),
     },
   }));

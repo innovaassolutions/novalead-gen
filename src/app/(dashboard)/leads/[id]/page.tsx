@@ -195,10 +195,10 @@ export default function LeadDetailPage({
                     {lead.company.industry}
                   </div>
                 )}
-                {lead.company.city && (
+                {(lead.company.city || lead.company.state || lead.company.country) && (
                   <div className="text-sm">
                     <span className="text-muted-foreground">Location:</span>{" "}
-                    {lead.company.city}, {lead.company.state}
+                    {[lead.company.city, lead.company.state, lead.company.country].filter(Boolean).join(", ")}
                   </div>
                 )}
                 {lead.company.runningAds === true && (
@@ -287,6 +287,8 @@ export default function LeadDetailPage({
                         title: lead.title,
                         companyName: lead.company?.name,
                         industry: lead.company?.industry,
+                        country: lead.company?.country,
+                        state: lead.company?.state,
                         source: lead.source,
                       },
                     },

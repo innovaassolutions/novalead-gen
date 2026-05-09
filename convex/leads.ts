@@ -238,7 +238,7 @@ export const list = query({
         return {
           ...lead,
           company: company
-            ? { name: company.name, phone: company.phone, industry: company.industry }
+            ? { name: company.name, phone: company.phone, industry: company.industry, country: company.country, state: company.state, city: company.city }
             : null,
         };
       })
@@ -406,6 +406,8 @@ export const batchPushToCrm = mutation({
       title?: string;
       companyName?: string;
       industry?: string;
+      country?: string;
+      state?: string;
       source: string;
     }> = [];
 
@@ -430,6 +432,8 @@ export const batchPushToCrm = mutation({
         title: lead.title,
         companyName: company?.name,
         industry: company?.industry,
+        country: company?.country,
+        state: company?.state,
         source: lead.source,
       });
 

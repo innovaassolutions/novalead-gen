@@ -9,6 +9,7 @@ const rateLimiter = new RateLimiter(5, 1000);
 
 function buildPayload(lead: any): NovaCrmLeadPayload {
   const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || "Unknown";
+  const location = [lead.country, lead.state].filter(Boolean).join(", ");
   return {
     name: fullName,
     email: lead.email,
@@ -22,6 +23,7 @@ function buildPayload(lead: any): NovaCrmLeadPayload {
     utm_source: "leadgen",
     utm_medium: "automated",
     utm_campaign: lead.campaignName || "default",
+    utm_content: location || undefined,
   };
 }
 

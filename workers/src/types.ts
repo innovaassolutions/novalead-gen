@@ -40,6 +40,7 @@ export interface NovaCrmLeadPayload {
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
+  utm_content?: string; // country/state location passed through this field
 }
 
 // Instantly lead payload

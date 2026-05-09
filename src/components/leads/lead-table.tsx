@@ -48,7 +48,7 @@ export type Lead = {
   status: string;
   validationScore?: number;
   createdAt: number;
-  company?: { name: string; phone?: string; industry?: string } | null;
+  company?: { name: string; phone?: string; industry?: string; country?: string; state?: string; city?: string } | null;
 };
 
 // Filterable column ids
