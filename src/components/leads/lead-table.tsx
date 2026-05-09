@@ -35,6 +35,7 @@ import {
 import { ArrowUpDown, Send, Trash2, FolderPlus, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
+import { countryName } from "@/lib/countries";
 
 export type Lead = {
   _id: string;
@@ -52,7 +53,7 @@ export type Lead = {
 };
 
 // Filterable column ids
-const FILTER_COLUMNS = ["name", "email", "title", "company", "industry", "status"];
+const FILTER_COLUMNS = ["name", "email", "title", "company", "industry", "city", "state", "country", "status"];
 
 const columns: ColumnDef<Lead>[] = [
   {
@@ -120,6 +121,33 @@ const columns: ColumnDef<Lead>[] = [
     header: "Industry",
     cell: ({ row }) => (
       <span className="text-sm text-muted-foreground">{row.original.company?.industry || "\u2014"}</span>
+    ),
+  },
+  {
+    id: "city",
+    accessorFn: (row) => row.company?.city ?? "",
+    header: "City",
+    enableColumnFilter: true,
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">{row.original.company?.city || "\u2014"}</span>
+    ),
+  },
+  {
+    id: "state",
+    accessorFn: (row) => row.company?.state ?? "",
+    header: "State",
+    enableColumnFilter: true,
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">{row.original.company?.state || "\u2014"}</span>
+    ),
+  },
+  {
+    id: "country",
+    accessorFn: (row) => countryName(row.company?.country),
+    header: "Country",
+    enableColumnFilter: true,
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground">{countryName(row.original.company?.country) || "\u2014"}</span>
     ),
   },
   {

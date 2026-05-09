@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, Globe, MapPin, Star, CheckCircle2, Sparkles, Loader2, LayoutGrid, List } from "lucide-react";
+import { countryName } from "@/lib/countries";
 import Link from "next/link";
 
 export default function CompaniesPage() {
@@ -168,7 +169,9 @@ export default function CompaniesPage() {
                 <TableHead className="w-10"></TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Domain</TableHead>
-                <TableHead>Location</TableHead>
+                <TableHead>City</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>Country</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-center">Rating</TableHead>
                 <TableHead className="text-center">Status</TableHead>
@@ -201,12 +204,14 @@ export default function CompaniesPage() {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {company.address && (
-                      <span className="flex items-center gap-1 max-w-[200px] truncate">
-                        <MapPin className="h-3 w-3 shrink-0" /> {company.address}
-                      </span>
-                    )}
+                  <TableCell className="text-sm text-muted-foreground">
+                    {company.city || "—"}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {company.state || "—"}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {countryName(company.country) || "—"}
                   </TableCell>
                   <TableCell>
                     {(company.category || company.industry) && (
@@ -281,9 +286,10 @@ export default function CompaniesPage() {
                       <Globe className="h-3 w-3" /> {company.domain}
                     </div>
                   )}
-                  {company.address && (
+                  {(company.city || company.country) && (
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <MapPin className="h-3 w-3" /> {company.address}
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      {[company.city, company.state, countryName(company.country)].filter(Boolean).join(", ")}
                     </div>
                   )}
                   {company.googleRating && (

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { STATUS_COLORS } from "@/lib/constants";
+import { countryName } from "@/lib/countries";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 export default function LeadDetailPage({
@@ -198,7 +199,7 @@ export default function LeadDetailPage({
                 {(lead.company.city || lead.company.state || lead.company.country) && (
                   <div className="text-sm">
                     <span className="text-muted-foreground">Location:</span>{" "}
-                    {[lead.company.city, lead.company.state, lead.company.country].filter(Boolean).join(", ")}
+                    {[lead.company.city, lead.company.state, countryName(lead.company.country)].filter(Boolean).join(", ")}
                   </div>
                 )}
                 {lead.company.runningAds === true && (
